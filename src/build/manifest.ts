@@ -1,16 +1,22 @@
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
+export interface BuildManifestRoute {
+  errorBoundaries: string[];
+  layouts: string[];
+  pattern: string;
+  source: string;
+  serverErrorBoundaries: string[];
+  serverSource?: string;
+}
+
 export interface BuildManifest {
   appDir: string;
   assets: {
     clientEntry?: string;
   };
   generatedAt: string;
-  routes: Array<{
-    pattern: string;
-    source: string;
-  }>;
+  routes: BuildManifestRoute[];
 }
 
 export async function writeManifest(outDir: string, manifest: BuildManifest): Promise<string> {

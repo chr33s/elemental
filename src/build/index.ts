@@ -3,7 +3,6 @@ import path from "node:path";
 import { build as esbuild } from "esbuild";
 import { discoverRoutes } from "./discover.ts";
 import { type BuildManifest, writeManifest } from "./manifest.ts";
-import { validateModuleWithOxc } from "./oxc.ts";
 
 export interface BuildOptions {
   appDir?: string;
@@ -35,10 +34,6 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
 
   if (routes.length === 0) {
     throw new Error(`No routes were discovered under ${appDir}`);
-  }
-
-  for (const route of routes) {
-    await validateModuleWithOxc(route.filePath);
   }
 
   const rootRoute = routes.find((route) => route.pattern === "/");
@@ -79,7 +74,17 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     },
     generatedAt: new Date().toISOString(),
     routes: routes.map((route) => ({
+      errorBoundaries: route.errorBoundaries.map((filePath) =>
+        toPosixPath(path.relative(rootDir, filePath)),
+      ),
+      layouts: route.layouts.map((filePath) => toPosixPath(path.relative(rootDir, filePath))),
       pattern: route.pattern,
+      serverErrorBoundaries: route.serverErrorBoundaries.map((filePath) =>
+        toPosixPath(path.relative(rootDir, filePath)),
+      ),
+      serverSource: route.serverFilePath
+        ? toPosixPath(path.relative(rootDir, route.serverFilePath))
+        : undefined,
       source: toPosixPath(path.relative(rootDir, route.filePath)),
     })),
   };
