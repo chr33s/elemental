@@ -2,7 +2,7 @@
 
 ## Summary
 
-Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules for data loading and mutations, native custom element upgrade on the client, and explicit custom element registration conventions.
+Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules via `server.ts`, and `layout.ts` as the layout render module and layout client component module.
 
 v0 intentionally focuses on a single rendering model: runtime SSR. There is no mode flag in v0.
 
@@ -16,7 +16,8 @@ v0 intentionally focuses on a single rendering model: runtime SSR. There is no m
 - Support nested layouts.
 - Support route-level data loading and mutations.
 - Use `index.ts` as the default route render module.
-- Support `import { html, safeHtml } from 'elemental';` for route rendering.
+- Use `layout.ts` as the default layout render module.
+- Support `import { html, safeHtml } from 'elemental';` for route and layout rendering.
 - Escape interpolated values by default unless explicitly marked safe.
 - Support client-side navigation and route transitions.
 - Support native custom element upgrade in the browser.
@@ -48,7 +49,6 @@ Future commands may include development, build, and start flows, but v0 is defin
 
 ```txt
 src/
-  layout.html
   layout.ts
   layout.css
 
@@ -70,14 +70,13 @@ src/
 
 ### File meanings
 
-- `layout.html`: HTML shell template for a directory layout.
-- `layout.ts`: browser-only runtime/setup for a directory layout.
+- `layout.ts`: layout render module and layout client component module.
 - `layout.css`: global stylesheet for a directory layout.
 - `index.ts`: route render module and client component module.
 - `server.ts`: route server module.
 - any other `*.css`: scoped CSS module.
 
-Any directory may define its own `layout.html`, `layout.ts`, and `layout.css`, allowing nested layouts.
+Any directory may define its own `layout.ts` and `layout.css`, allowing nested layouts.
 
 ---
 
@@ -129,12 +128,10 @@ Example:
 
 ```txt
 src/
-  layout.html
   layout.ts
   layout.css
 
   dashboard/
-    layout.html
     layout.ts
     layout.css
 
@@ -150,7 +147,7 @@ A request to `/dashboard/settings` uses:
 2. the dashboard layout,
 3. the settings route body from `index.ts`.
 
-Nested layouts compose their body outlet via the same marker used by the root shell.
+Nested layouts compose by wrapping the already-rendered child content from leaf to root.
 
 ### Asset composition
 
@@ -159,36 +156,87 @@ For a matched route, Elemental includes all ancestor layout assets in root-to-le
 This applies to:
 
 - `layout.css`
-- `layout.ts`
+- browser bundles for `layout.ts`
+- browser bundles for `index.ts`
 
 ---
 
-## Shell markers
+## Layout render model
 
-Elemental recognizes the following markers in layout HTML:
+`layout.ts` is the default layout render module.
 
-- `<!--elemental-head-->`
-- `<!--elemental-body-->`
-- `<!--elemental-scripts-->`
+Each matched layout may export a default function that returns an HTML result using the `html` tagged template helper.
 
-Example `layout.html`:
+A layout receives the already-composed child content and returns the document or layout wrapper for that subtree.
 
-```html
-<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <!--elemental-head-->
-  </head>
-  <body>
-    <!--elemental-body-->
-    <!--elemental-scripts-->
-  </body>
-</html>
+### Layout render props
+
+When Elemental executes the default export from `layout.ts`, it provides:
+
+```ts
+type LayoutRenderProps = {
+  content: HtmlResult;
+  url: URL;
+};
 ```
 
-The framework injects CSS, rendered body content, and client scripts through these markers.
+Where:
+
+- `content` is the already-rendered child route or child layout content,
+- `url` is the request URL.
+
+### Default export contract
+
+`layout.ts` exports a default function that returns an HTML result using the `html` tagged template helper.
+
+Example:
+
+```ts
+import { html } from 'elemental';
+
+export default function layout(props: LayoutRenderProps) {
+  return html`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+      </head>
+      <body>
+        ${props.content}
+      </body>
+    </html>
+  `;
+}
+```
+
+A nested layout may return a fragment or subtree wrapper rather than a full document shell.
+
+Example:
+
+```ts
+import { html } from 'elemental';
+
+export default function layout(props: LayoutRenderProps) {
+  return html`
+    <section class="dashboard-layout">
+      <nav><el-dashboard-nav></el-dashboard-nav></nav>
+      <main>${props.content}</main>
+    </section>
+  `;
+}
+```
+
+### Layout composition
+
+For a matched route, Elemental composes output in this order:
+
+1. render the route body from `index.ts`,
+2. pass that result as `content` to the nearest parent layout,
+3. continue wrapping through each ancestor layout,
+4. stream the final rendered document response.
+
+The outermost layout is responsible for returning the full document shell when a full document response is needed.
 
 ---
 
@@ -202,11 +250,11 @@ A route is rendered by:
 2. gathering parent layouts,
 3. running `loader()` from `server.ts` if present,
 4. executing the default export from `index.ts`,
-5. composing nested layouts,
+5. composing nested layouts by executing matched `layout.ts` modules from leaf to root,
 6. injecting CSS and scripts,
 7. streaming the final document response.
 
-This makes `index.ts` the primary source of route markup, while `server.ts` supplies logic and control.
+This makes `index.ts` the primary source of route body markup, while `layout.ts` defines the surrounding layout structure and document shell.
 
 ---
 
@@ -290,6 +338,7 @@ export default function component(props: RouteRenderProps) {
 The `html` tagged template escapes interpolated values by default.
 
 Elemental should:
+
 - HTML-escape strings by default,
 - flatten arrays,
 - ignore `null`, `undefined`, and `false`,
@@ -318,6 +367,7 @@ export default function component(props: RouteRenderProps) {
 `index.ts` may also define named exports for custom element classes.
 
 Any named export that:
+
 - is a subclass of `HTMLElement`, and
 - defines a valid `static tagName`
 
@@ -334,6 +384,7 @@ static tagName = 'el-example-component';
 ```
 
 The tag name must:
+
 - be a string,
 - contain a hyphen,
 - be unique within the custom element registry.
@@ -388,11 +439,94 @@ Server-side imports of `index.ts` must not attempt to access `customElements`.
 
 ## `layout.ts`
 
-`layout.ts` is a browser-only module loaded for matched layouts.
+`layout.ts` is both a layout render module and a layout client component module.
 
-It may define layout-level client behavior and shared custom elements for that layout scope.
+### Isomorphic requirement
 
-If `layout.ts` exports custom element classes, the same browser-only auto-registration rules apply.
+`layout.ts` must be safe to import in both server and browser environments.
+
+Top-level code should avoid direct access to browser-only globals unless guarded.
+
+Elemental may compile separate server and browser bundles from `layout.ts`. The authoring contract is unified, but emitted runtime code may differ by environment.
+
+### Default export
+
+`layout.ts` may export a default function that returns layout HTML using the `html` tagged template helper.
+
+This default export participates in server-side layout composition.
+
+Example:
+
+```ts
+import { html } from 'elemental';
+
+export default function layout(props: LayoutRenderProps) {
+  return html`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+      </head>
+      <body>
+        <el-app-shell>
+          ${props.content}
+        </el-app-shell>
+      </body>
+    </html>
+  `;
+}
+```
+
+### Named exports for layout client components
+
+`layout.ts` may also define named exports for shared custom elements and layout-level browser behavior.
+
+Any named export that:
+
+- is a subclass of `HTMLElement`, and
+- defines a valid `static tagName`
+
+is automatically registered by Elemental in the browser runtime using the same rules as route modules.
+
+Example:
+
+```ts
+import { html } from 'elemental';
+
+export default function layout(props: LayoutRenderProps) {
+  return html`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+      </head>
+      <body>
+        <el-app-shell>
+          ${props.content}
+        </el-app-shell>
+      </body>
+    </html>
+  `;
+}
+
+export class AppShell extends HTMLElement {
+  static tagName = 'el-app-shell';
+
+  connectedCallback() {
+    this.setAttribute('ready', '');
+  }
+}
+```
+
+### Auto-registration rule
+
+Elemental imports all named exports from `layout.ts` and automatically registers every export that matches the component contract in the browser runtime.
+
+Elemental must not redefine an already registered custom element. If a tag name is already present in `customElements`, registration for that class is skipped.
+
+Server-side imports of `layout.ts` must not attempt to access `customElements`.
 
 ---
 
@@ -403,6 +537,7 @@ Each route may define a `server.ts`.
 ### Named exports
 
 A route server module may export:
+
 - `loader(ctx)` for route data loading.
 - `action(ctx)` for form submissions and mutations.
 
@@ -492,6 +627,7 @@ Styling rules in v0 are:
 Layout-level CSS files apply globally for their layout scope.
 
 Examples:
+
 - `src/layout.css`
 - `src/dashboard/layout.css`
 
@@ -527,8 +663,8 @@ A request flows through the framework as follows:
 3. if `server.ts` default export exists, execute it and return its `Response` directly,
 4. otherwise run `loader()` if present,
 5. execute the default export from `index.ts`,
-6. compose nested layouts,
-7. inject CSS and scripts into shell markers,
+6. execute matched `layout.ts` default exports from leaf to root, passing child content through `content`,
+7. inject CSS and scripts,
 8. stream the final document,
 9. load route and layout modules in the browser,
 10. auto-register exported custom elements,
@@ -545,6 +681,7 @@ Elemental v0 includes client-side navigation support.
 ### Router
 
 The client router is responsible for:
+
 - intercepting same-origin navigations,
 - using the Navigation API when available,
 - falling back as needed,
@@ -558,6 +695,7 @@ The client router is responsible for:
 Route transitions are supported during client navigation.
 
 Preferred implementation:
+
 - use the View Transitions API when available,
 - fall back to non-animated DOM replacement otherwise.
 
@@ -595,6 +733,7 @@ Possible manifest contents include route metadata and asset mappings.
 - Explicit contracts over inference.
 - Runtime SSR as the single v0 model.
 - Unified route render and component module through `index.ts`.
+- Unified layout render and component module through `layout.ts`.
 - `html` and `safeHtml` instead of a custom HTML DSL.
 - Escaped-by-default template interpolation.
 - Native browser upgrade over virtual DOM hydration.
@@ -604,6 +743,37 @@ Possible manifest contents include route metadata and asset mappings.
 ---
 
 ## Example route
+
+### `src/layout.ts`
+
+```ts
+import { html } from 'elemental';
+
+export default function layout(props: LayoutRenderProps) {
+  return html`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+      </head>
+      <body>
+        <el-app-shell>
+          ${props.content}
+        </el-app-shell>
+      </body>
+    </html>
+  `;
+}
+
+export class AppShell extends HTMLElement {
+  static tagName = 'el-app-shell';
+
+  connectedCallback() {
+    this.setAttribute('ready', '');
+  }
+}
+```
 
 ### `src/blog/[slug]/index.ts`
 
@@ -662,7 +832,8 @@ Elemental v0 is a runtime-SSR framework for Web Components where:
 - routes are defined by directories containing `index.ts`,
 - route rendering is defined primarily by the default export in `index.ts`,
 - route logic lives in optional `server.ts`,
-- layouts are defined by `layout.html`, `layout.ts`, and `layout.css`,
+- layouts are defined by `layout.ts` and `layout.css`,
+- layout rendering is defined by the default export in `layout.ts`,
 - routing is filesystem-based,
 - component tag names are explicit via `static tagName`,
 - client registration is automatic in the browser runtime, and
