@@ -624,6 +624,7 @@ export const secret = "hidden";
 
   it("verifies package import and CLI entrypoints through built artifacts", async () => {
     const packageDir = await mkdtemp(path.join(rootDir, ".tmp-phase11-package-"));
+    const consumerAppDir = path.join(packageDir, "consumer-app");
 
     temporaryPaths.add(packageDir);
 
@@ -658,6 +659,16 @@ export const secret = "hidden";
     await buildProject({
       rootDir: packageDir,
     });
+    await writeRouteModule(
+      consumerAppDir,
+      path.join("src", "index.ts"),
+      `import { html } from "elemental";
+
+export default function home() {
+  return html\`<main>Consumer app</main>\`;
+}
+`,
+    );
 
     const importResult = await execFileAsync(
       process.execPath,
@@ -672,14 +683,28 @@ export const secret = "hidden";
     );
     const cliResult = await execFileAsync(
       process.execPath,
-      [path.join(packageDir, packageJson.bin.elemental), "build"],
+      [path.join(packageDir, packageJson.bin.elemental), "build", "spec/fixtures/basic-app/src"],
       {
         cwd: packageDir,
       },
     );
+    const consumerCliResult = await execFileAsync(
+      process.execPath,
+      [path.join(packageDir, packageJson.bin.elemental), "build"],
+      {
+        cwd: consumerAppDir,
+      },
+    );
+    const consumerManifest = JSON.parse(
+      await readFile(path.join(consumerAppDir, "dist", "manifest.json"), "utf8"),
+    ) as BuildManifest;
 
     expect(importResult.stdout.trim()).toBe("ok");
     expect(cliResult.stdout).toContain("Built ");
+    expect(consumerCliResult.stdout).toContain("Built 1 route(s) into dist");
+    expect(consumerManifest.assets.clientEntry).toMatch(/^assets\/.+\.js$/u);
+    expect(consumerManifest.routes[0]?.server.route).toMatch(/^server\/.+\.js$/u);
+    expect(consumerManifest.routes[0]?.browser.route).toMatch(/^assets\/.+\.js$/u);
   });
 });
 

@@ -352,9 +352,11 @@ function collectEntryOutputs(
       continue;
     }
 
+    const absoluteOutputPath = path.resolve(workingDir, outputPath);
+
     entryOutputs.set(
       path.resolve(workingDir, outputInfo.entryPoint),
-      toPosixPath(path.relative(outDir, path.resolve(outputPath))),
+      toPosixPath(path.relative(outDir, absoluteOutputPath)),
     );
   }
 

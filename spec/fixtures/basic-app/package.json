@@ -1,0 +1,17 @@
+{
+  "name": "elemental-spec-fixtures-basic-app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "elemental build",
+    "dev": "elemental build --watch",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "elemental": "file:../../../"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}
