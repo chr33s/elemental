@@ -543,6 +543,34 @@ export default function serverErrorBoundary() {
     expect(routeServerText).toContain("server-only-value");
   });
 
+  it("builds apps that do not define a root route", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase5-no-root-"));
+    const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase5-no-root-dist-"));
+
+    temporaryPaths.add(appDir);
+    temporaryPaths.add(outDir);
+
+    await writeRouteModule(
+      appDir,
+      path.join("about", "index.ts"),
+      `import { html } from "elemental";
+
+export default function about() {
+  return html\`<main>About</main>\`;
+}
+`,
+    );
+
+    const result = await buildProject({
+      appDir,
+      outDir,
+      rootDir,
+    });
+    const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as BuildManifest;
+
+    expect(manifest.routes.map((route) => route.pattern)).toEqual(["/about"]);
+  });
+
   it("rejects browser-reachable imports of server-only route modules", async () => {
     const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-boundary-"));
     const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-boundary-dist-"));

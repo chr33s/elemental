@@ -6,6 +6,8 @@ export interface RenderDocumentOptions {
   body: HtmlRenderable;
   clientAssetHref?: string;
   head?: HtmlRenderable;
+  scripts?: string[];
+  stylesheets?: string[];
   title?: string;
 }
 
@@ -14,17 +16,24 @@ export function renderSubtree(value: HtmlRenderable): string {
 }
 
 export function renderDocument(options: RenderDocumentOptions): string {
-  const scriptTag = options.clientAssetHref
-    ? html`<script type="module" src=${options.clientAssetHref}></script>`
-    : EMPTY_HTML;
+  const scriptHrefs = [
+    ...(options.scripts ?? []),
+    ...(options.clientAssetHref === undefined ? [] : [options.clientAssetHref]),
+  ];
+  const scriptTags = scriptHrefs.map(
+    (scriptHref) => html`<script type="module" src=${scriptHref}></script>`,
+  );
+  const stylesheetTags = (options.stylesheets ?? []).map(
+    (stylesheetHref) => html`<link rel="stylesheet" href=${stylesheetHref} />`,
+  );
+  const titleTag = options.title === undefined ? EMPTY_HTML : html`<title>${options.title}</title>`;
 
   return renderToString(html`<!doctype html>
     <html lang="en">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>${options.title ?? "Elemental"}</title>
-        ${options.head ?? EMPTY_HTML} ${scriptTag}
+        ${titleTag} ${options.head ?? EMPTY_HTML} ${stylesheetTags} ${scriptTags}
       </head>
       <body>
         <div data-route-outlet>${options.body}</div>

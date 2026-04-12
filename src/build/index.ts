@@ -40,14 +40,6 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     throw new Error(`No routes were discovered under ${appDir}`);
   }
 
-  const rootRoute = routes.find((route) => route.pattern === "/");
-
-  if (!rootRoute) {
-    throw new Error(
-      `The current server runtime requires a root route at ${path.join(appDir, "index.ts")}`,
-    );
-  }
-
   await buildPackageEntrypoints(packageEntryPath, cliEntryPath, outDir);
 
   const layoutStylesheetAssets = await emitLayoutStylesheetAssets(
@@ -144,9 +136,8 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     sourcemap: true,
     stdin: {
       contents: createServerEntry({
-        clientAssetHref: `/${clientAssetRelativePath}`,
         distDir: outDir,
-        routeFilePath: rootRoute.filePath,
+        manifest,
         serverAppPath,
       }),
       resolveDir: rootDir,
@@ -226,10 +217,10 @@ function createManifestRoute(options: {
       route: serverRoute,
       routeServer: route.serverFilePath
         ? requireEntryOutput(
-          serverOutputs,
-          route.serverFilePath,
-          `route server module ${route.serverFilePath}`,
-        )
+            serverOutputs,
+            route.serverFilePath,
+            `route server module ${route.serverFilePath}`,
+          )
         : undefined,
       serverErrorBoundaries: route.serverErrorBoundaries.map((filePath) =>
         requireEntryOutput(serverOutputs, filePath, `server error boundary ${filePath}`),
@@ -427,11 +418,11 @@ function createCssModulePlugin(target: "browser" | "server"): Plugin {
           contents:
             target === "browser"
               ? [
-                `const sheet = new CSSStyleSheet();`,
-                `sheet.replaceSync(${JSON.stringify(sourceText)});`,
-                `export default sheet;`,
-                "",
-              ].join("\n")
+                  `const sheet = new CSSStyleSheet();`,
+                  `sheet.replaceSync(${JSON.stringify(sourceText)});`,
+                  `export default sheet;`,
+                  "",
+                ].join("\n")
               : `const cssText = ${JSON.stringify(sourceText)};\nexport default cssText;\n`,
           loader: "js",
         };
@@ -472,19 +463,16 @@ function isAppRouteOrLayoutModule(filePath: string, appDir: string): boolean {
 }
 
 function createServerEntry(options: {
-  clientAssetHref: string;
   distDir: string;
-  routeFilePath: string;
+  manifest: BuildManifest;
   serverAppPath: string;
 }): string {
   return [
     `import { startServer } from ${JSON.stringify(options.serverAppPath)};`,
-    `import renderRoute from ${JSON.stringify(options.routeFilePath)};`,
     "",
     "startServer({",
-    `  clientAssetHref: ${JSON.stringify(options.clientAssetHref)},`,
     `  distDir: ${JSON.stringify(options.distDir)},`,
-    "  renderRoute,",
+    `  manifest: ${JSON.stringify(options.manifest, null, 2)},`,
     "});",
     "",
   ].join("\n");

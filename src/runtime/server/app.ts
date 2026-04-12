@@ -1,20 +1,51 @@
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import type { RouteRenderer } from "../shared/types.ts";
-import { renderDocument } from "./render-document.ts";
+import { Readable } from "node:stream";
+import { pathToFileURL } from "node:url";
+import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
+import { html, type HtmlRenderable, type HtmlResult } from "../shared/html.ts";
+import type { LayoutProps, RouteParams, RouteProps, RouteServerContext } from "../shared/types.ts";
+import { renderDocument, renderSubtree } from "./render-document.ts";
 
 export interface StartServerOptions {
-  clientAssetHref?: string;
   distDir: string;
+  manifest: BuildManifest;
   port?: number;
-  renderRoute: RouteRenderer;
 }
+
+export interface RouterPayload {
+  assets: {
+    scripts: string[];
+    stylesheets: string[];
+  };
+  head: string;
+  outlet: string;
+  status: number;
+}
+
+interface CompiledLayoutModule {
+  default?: (props: LayoutProps) => HtmlRenderable | Promise<HtmlRenderable>;
+}
+
+interface CompiledRouteModule {
+  default?: (props: RouteProps) => HtmlRenderable | Promise<HtmlRenderable>;
+  head?: (props: RouteProps) => HtmlRenderable | Promise<HtmlRenderable>;
+}
+
+interface CompiledRouteServerModule {
+  action?: (context: RouteServerContext) => unknown;
+  default?: (context: RouteServerContext) => Response | Promise<Response>;
+  loader?: (context: RouteServerContext) => unknown;
+}
+
+const EMPTY_HTML = html``;
+const ROUTER_HEADER_NAME = "x-elemental-router";
 
 export function startServer(options: StartServerOptions): Server {
   const port = options.port ?? Number(process.env.PORT ?? 3000);
   const server = createServer((request, response) => {
-    void handleRequest(request, response, options);
+    void handleNodeRequest(request, response, options);
   });
 
   server.listen(port, () => {
@@ -24,39 +55,46 @@ export function startServer(options: StartServerOptions): Server {
   return server;
 }
 
-async function handleRequest(
+export async function handleElementalRequest(
+  request: Request,
+  options: StartServerOptions,
+): Promise<Response> {
+  const url = new URL(request.url);
+
+  if (url.pathname.startsWith("/assets/")) {
+    return serveAsset(url.pathname, options.distDir);
+  }
+
+  const matchedRoute = matchRoute(url.pathname, options.manifest.routes);
+
+  if (matchedRoute === undefined) {
+    return textResponse("Not found", 404);
+  }
+
+  try {
+    return await renderMatchedRoute({
+      manifest: options.manifest,
+      matchedRoute,
+      request,
+      resolver: createServerModuleResolver(options.distDir),
+    });
+  } catch (error) {
+    console.error(error);
+    return textResponse(error instanceof Error ? error.message : "Unexpected server error", 500);
+  }
+}
+
+async function handleNodeRequest(
   request: IncomingMessage,
   response: ServerResponse,
   options: StartServerOptions,
 ): Promise<void> {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1:3000"}`);
+    const requestObject = createWebRequest(request, url);
+    const renderedResponse = await handleElementalRequest(requestObject, options);
 
-    if (url.pathname.startsWith("/assets/")) {
-      await serveAsset(url.pathname, response, options.distDir);
-      return;
-    }
-
-    if (url.pathname !== "/") {
-      response.statusCode = 404;
-      response.setHeader("content-type", "text/plain; charset=utf-8");
-      response.end("Not found");
-      return;
-    }
-
-    const body = await options.renderRoute({
-      params: {},
-      url,
-    });
-
-    response.statusCode = 200;
-    response.setHeader("content-type", "text/html; charset=utf-8");
-    response.end(
-      renderDocument({
-        body,
-        clientAssetHref: options.clientAssetHref,
-      }),
-    );
+    await sendNodeResponse(response, renderedResponse, request.method ?? "GET");
   } catch (error) {
     response.statusCode = 500;
     response.setHeader("content-type", "text/plain; charset=utf-8");
@@ -64,30 +102,376 @@ async function handleRequest(
   }
 }
 
-async function serveAsset(
-  assetPathname: string,
-  response: ServerResponse,
-  distDir: string,
-): Promise<void> {
+async function renderMatchedRoute(options: {
+  manifest: BuildManifest;
+  matchedRoute: {
+    params: RouteParams;
+    route: BuildManifestRoute;
+  };
+  request: Request;
+  resolver: <TModule>(modulePath: string) => Promise<TModule>;
+}): Promise<Response> {
+  const { manifest, matchedRoute, request, resolver } = options;
+  const { params, route } = matchedRoute;
+  const url = new URL(request.url);
+  const routeServerContext: RouteServerContext = {
+    params,
+    request,
+    url,
+  };
+  const routeModule = await resolver<CompiledRouteModule>(route.server.route);
+  const routeServerModule = route.server.routeServer
+    ? await resolver<CompiledRouteServerModule>(route.server.routeServer)
+    : undefined;
+
+  if (typeof routeServerModule?.default === "function") {
+    const response = await routeServerModule.default(routeServerContext);
+
+    if (!(response instanceof Response)) {
+      throw new TypeError(
+        `Route server default export for ${route.pattern} must return a Response.`,
+      );
+    }
+
+    return response;
+  }
+
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    if (typeof routeServerModule?.action !== "function") {
+      return new Response("Method Not Allowed", {
+        headers: {
+          allow: "GET, HEAD",
+          "content-type": "text/plain; charset=utf-8",
+        },
+        status: 405,
+      });
+    }
+
+    const actionResult = await routeServerModule.action(routeServerContext);
+
+    if (actionResult instanceof Response) {
+      return actionResult;
+    }
+
+    return textResponse(
+      "Action handlers must return a Response until non-Response mutation semantics are specified.",
+      501,
+    );
+  }
+
+  const loaderResult =
+    typeof routeServerModule?.loader === "function"
+      ? await routeServerModule.loader(routeServerContext)
+      : undefined;
+
+  if (loaderResult instanceof Response) {
+    return loaderResult;
+  }
+
+  if (typeof routeModule.default !== "function") {
+    throw new TypeError(`Route module for ${route.pattern} must export a default render function.`);
+  }
+
+  const routeProps: RouteProps = {
+    data: normalizeRouteData(loaderResult),
+    params,
+    url,
+  };
+  const routeHead =
+    typeof routeModule.head === "function" ? await routeModule.head(routeProps) : EMPTY_HTML;
+  const routeBody = await routeModule.default(routeProps);
+  const assets = createResolvedAssets(manifest, route);
+
+  if (isRouterRequest(request)) {
+    const outlet = await composeLayouts({
+      head: EMPTY_HTML,
+      outlet: routeBody,
+      params,
+      resolver,
+      url,
+      layoutModulePaths: route.server.layouts.slice(1),
+    });
+
+    return Response.json({
+      assets,
+      head: renderSubtree(routeHead),
+      outlet: renderSubtree(outlet),
+      status: 200,
+    } satisfies RouterPayload);
+  }
+
+  if (route.server.layouts.length === 0) {
+    return htmlResponse(
+      renderDocument({
+        body: routeBody,
+        head: routeHead,
+        scripts: assets.scripts,
+        stylesheets: assets.stylesheets,
+      }),
+    );
+  }
+
+  const document = await composeLayouts({
+    head: composeAssetHead(routeHead, assets),
+    outlet: routeBody,
+    params,
+    resolver,
+    url,
+    layoutModulePaths: route.server.layouts,
+  });
+
+  return htmlResponse(renderSubtree(document));
+}
+
+async function serveAsset(assetPathname: string, distDir: string): Promise<Response> {
   const relativePath = assetPathname.replace(/^\//, "");
   const filePath = path.join(distDir, relativePath);
   const normalizedRelativePath = path.relative(distDir, filePath);
 
   if (normalizedRelativePath.startsWith("..") || path.isAbsolute(normalizedRelativePath)) {
-    response.statusCode = 403;
-    response.end("Forbidden");
-    return;
+    return textResponse("Forbidden", 403);
   }
 
   try {
     const fileContents = await readFile(filePath);
-    response.statusCode = 200;
-    response.setHeader("content-type", contentTypeForPath(filePath));
-    response.end(fileContents);
+    return new Response(fileContents, {
+      headers: {
+        "content-type": contentTypeForPath(filePath),
+      },
+      status: 200,
+    });
   } catch {
-    response.statusCode = 404;
-    response.end("Asset not found");
+    return textResponse("Asset not found", 404);
   }
+}
+
+function createResolvedAssets(
+  manifest: BuildManifest,
+  route: BuildManifestRoute,
+): RouterPayload["assets"] {
+  return {
+    scripts: [manifest.assets.clientEntry, ...route.assets.scripts]
+      .filter((entryPath): entryPath is string => entryPath !== undefined)
+      .map((entryPath) => `/${entryPath}`),
+    stylesheets: route.assets.layoutCss.map((entryPath) => `/${entryPath}`),
+  };
+}
+
+function composeAssetHead(routeHead: HtmlRenderable, assets: RouterPayload["assets"]): HtmlResult {
+  return html`${routeHead}${assets.stylesheets.map(
+    (stylesheetHref) => html`<link rel="stylesheet" href=${stylesheetHref} />`,
+  )}${assets.scripts.map((scriptHref) => html`<script type="module" src=${scriptHref}></script>`)}`;
+}
+
+async function composeLayouts(options: {
+  head: HtmlRenderable;
+  layoutModulePaths: string[];
+  outlet: HtmlRenderable;
+  params: RouteParams;
+  resolver: <TModule>(modulePath: string) => Promise<TModule>;
+  url: URL;
+}): Promise<HtmlRenderable> {
+  let currentOutlet = options.outlet;
+  const head = html`${options.head}`;
+
+  for (let index = options.layoutModulePaths.length - 1; index >= 0; index -= 1) {
+    const modulePath = options.layoutModulePaths[index];
+    const layoutModule = await options.resolver<CompiledLayoutModule>(modulePath);
+
+    if (typeof layoutModule.default !== "function") {
+      throw new TypeError(`Layout module ${modulePath} must export a default render function.`);
+    }
+
+    currentOutlet = await layoutModule.default({
+      head,
+      outlet: html`${currentOutlet}`,
+      params: options.params,
+      url: options.url,
+    });
+  }
+
+  return currentOutlet;
+}
+
+function createServerModuleResolver(distDir: string) {
+  const baseUrl = toDirectoryUrl(distDir);
+
+  return async function resolveServerModule<TModule>(modulePath: string): Promise<TModule> {
+    const resolvedUrl = new URL(modulePath, baseUrl);
+
+    return (await import(resolvedUrl.href)) as TModule;
+  };
+}
+
+function createWebRequest(request: IncomingMessage, url: URL): Request {
+  const headers = new Headers();
+
+  for (const [name, value] of Object.entries(request.headers)) {
+    if (value === undefined) {
+      continue;
+    }
+
+    headers.set(name, Array.isArray(value) ? value.join(", ") : value);
+  }
+
+  const method = request.method ?? "GET";
+
+  if (method === "GET" || method === "HEAD") {
+    return new Request(url, {
+      headers,
+      method,
+    });
+  }
+
+  return new Request(url, {
+    body: Readable.toWeb(request) as ReadableStream,
+    headers,
+    method,
+  } as RequestInit & {
+    duplex: "half";
+  });
+}
+
+async function sendNodeResponse(
+  nodeResponse: ServerResponse,
+  response: Response,
+  method: string,
+): Promise<void> {
+  nodeResponse.statusCode = response.status;
+
+  for (const [name, value] of response.headers) {
+    nodeResponse.setHeader(name, value);
+  }
+
+  if (method === "HEAD" || response.body === null) {
+    nodeResponse.end();
+    return;
+  }
+
+  nodeResponse.end(Buffer.from(await response.arrayBuffer()));
+}
+
+function matchRoute(
+  pathname: string,
+  routes: BuildManifestRoute[],
+):
+  | {
+    params: RouteParams;
+    route: BuildManifestRoute;
+  }
+  | undefined {
+  const pathnameSegments = splitPathSegments(pathname);
+
+  for (const route of routes) {
+    const params = matchRoutePattern(route.pattern, pathnameSegments);
+
+    if (params !== undefined) {
+      return {
+        params,
+        route,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function matchRoutePattern(pattern: string, pathnameSegments: string[]): RouteParams | undefined {
+  if (pattern === "/") {
+    return pathnameSegments.length === 0 ? {} : undefined;
+  }
+
+  const patternSegments = splitPathSegments(pattern);
+  const params: RouteParams = {};
+  let pathnameIndex = 0;
+
+  for (let patternIndex = 0; patternIndex < patternSegments.length; patternIndex += 1) {
+    const patternSegment = patternSegments[patternIndex];
+
+    if (patternSegment.startsWith("*")) {
+      const paramName = patternSegment.slice(1);
+      const remainingSegments = pathnameSegments.slice(pathnameIndex);
+
+      if (remainingSegments.length === 0) {
+        return undefined;
+      }
+
+      params[paramName] = remainingSegments;
+      pathnameIndex = pathnameSegments.length;
+      break;
+    }
+
+    const pathnameSegment = pathnameSegments[pathnameIndex];
+
+    if (pathnameSegment === undefined) {
+      return undefined;
+    }
+
+    if (patternSegment.startsWith(":")) {
+      params[patternSegment.slice(1)] = pathnameSegment;
+      pathnameIndex += 1;
+      continue;
+    }
+
+    if (patternSegment !== pathnameSegment) {
+      return undefined;
+    }
+
+    pathnameIndex += 1;
+  }
+
+  return pathnameIndex === pathnameSegments.length ? params : undefined;
+}
+
+function splitPathSegments(pathname: string): string[] {
+  if (pathname === "/") {
+    return [];
+  }
+
+  return pathname
+    .split("/")
+    .filter((segment) => segment.length > 0)
+    .map((segment) => decodeURIComponent(segment));
+}
+
+function normalizeRouteData(value: unknown): Record<string, unknown> {
+  if (value === null || value === undefined) {
+    return {};
+  }
+
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("loader() must return a plain object or a Response.");
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function isRouterRequest(request: Request): boolean {
+  return request.headers.get(ROUTER_HEADER_NAME)?.toLowerCase() === "true";
+}
+
+function htmlResponse(body: string): Response {
+  return new Response(body, {
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+    },
+    status: 200,
+  });
+}
+
+function textResponse(body: string, status: number): Response {
+  return new Response(body, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+    },
+    status,
+  });
+}
+
+function toDirectoryUrl(filePath: string): string {
+  const href = pathToFileURL(filePath).href;
+
+  return href.endsWith("/") ? href : `${href}/`;
 }
 
 function contentTypeForPath(filePath: string): string {

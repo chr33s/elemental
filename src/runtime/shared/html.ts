@@ -1,5 +1,6 @@
 const HTML_RESULT_TOKEN = Symbol("htmlResultToken");
-const SAFE_HTML_BRAND = Symbol("safeHtml");
+const HTML_RESULT_BRAND = Symbol.for("elemental.htmlResult");
+const SAFE_HTML_BRAND = Symbol.for("elemental.safeHtml");
 const ATTRIBUTE_ASSIGNMENT_PATTERN = /[^\s"'<>/=]+(?:\s*=\s*)$/;
 const DIRECT_HTML_RESULT_CONSTRUCTION_ERROR =
   "HtmlResult cannot be constructed directly. Use html`...` or safeHtml().";
@@ -28,6 +29,7 @@ interface TemplateParserState {
 }
 
 export class HtmlResult {
+  readonly [HTML_RESULT_BRAND] = true;
   readonly value: string;
 
   constructor(value: string, token?: symbol) {
@@ -94,6 +96,10 @@ function createHtmlResult(value: string): HtmlResult {
   return new HtmlResult(value, HTML_RESULT_TOKEN);
 }
 
+function isHtmlResult(value: HtmlRenderable): value is HtmlResult {
+  return typeof value === "object" && value !== null && HTML_RESULT_BRAND in value;
+}
+
 function isSafeHtmlValue(value: HtmlRenderable): value is SafeHtmlValue {
   return typeof value === "object" && value !== null && SAFE_HTML_BRAND in value;
 }
@@ -114,7 +120,7 @@ function renderTemplateValue(
 }
 
 function renderRenderable(value: HtmlRenderable): string {
-  if (value instanceof HtmlResult) {
+  if (isHtmlResult(value)) {
     return value.value;
   }
 
