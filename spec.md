@@ -598,6 +598,46 @@ In this case, the route bypasses normal `index.ts` rendering and layout composit
 
 ---
 
+## Security boundary
+
+Elemental enforces a strict security boundary between server-only code and isomorphic or browser code through the filesystem convention.
+
+### The `.server.ts` boundary
+
+`index.server.ts` files are never included in the browser bundle. This is not a build-time stripping heuristic — the file is simply excluded from the client bundler's module graph entirely.
+
+This guarantees that:
+
+- database clients, ORMs, and internal service SDKs imported by `loader()` or `action()` never appear in client bundles,
+- environment variables and secrets accessed in server modules are never exposed to the browser,
+- server-only dependencies and their transitive dependency trees are never shipped to the client.
+
+### Why server code lives in a separate file
+
+Elemental uses build-time heuristics to strip `HTMLElement` subclasses from the server bundle in `index.ts` and `layout.ts`. This is a **correctness** boundary — `HTMLElement` does not exist on the server, so a missed strip causes a build error or server crash.
+
+Server-only code like `loader()` and `action()` involves a fundamentally different boundary. A `loader()` that imports `db.query(...)` or reads `process.env.DATABASE_URL` is valid JavaScript in both environments. If the build fails to strip it from the browser bundle, the failure mode is **silent secret exposure** — not a crash.
+
+By keeping server-only code in `index.server.ts`, the security boundary is a filesystem boundary. No stripping heuristic is needed. The browser bundler never sees the file.
+
+### Bundle isolation rules
+
+| File | Server bundle | Browser bundle |
+|---|---|---|
+| `index.ts` | Default export included. `HTMLElement` subclass exports excluded. | Default export included. All named exports included. |
+| `index.server.ts` | Fully included. | Never included. |
+| `layout.ts` | Default export included. `HTMLElement` subclass exports excluded. | Default export included. All named exports included. |
+| `layout.css` | Not imported. Injected via asset composition. | Injected as `<link>` tag. |
+| `*.css` (non-layout) | Resolves to no-op. | Resolves to `CSSStyleSheet` instance. |
+
+### Author responsibilities
+
+- Never import from `index.server.ts` in `index.ts`, `layout.ts`, or any browser-reachable module. The build should treat such imports as errors.
+- Do not place secrets, database access, or internal API calls in `index.ts` or `layout.ts`. These files are included in the browser bundle.
+- Use `index.server.ts` for all code that must remain server-only.
+
+---
+
 ## Data loading and mutations
 
 ### `loader(ctx)`
@@ -916,6 +956,7 @@ Where:
 - Native browser upgrade over virtual DOM hydration.
 - Scoped styling by default.
 - Convention first, with `index.server.ts` default export as a full-response escape hatch.
+- Filesystem-level security boundary between server-only and browser-reachable code.
 
 ---
 
