@@ -14,6 +14,8 @@ export default function rootLayout(props: LayoutProps) {
             <a href="/">Home</a>
             <a href="/about">About</a>
             <a href="/search">Search</a>
+            <a href="/recover/broken">Recover</a>
+            <a href="/reload">Reload</a>
           </nav>
           <div id="shell-marker">Persistent shell</div>
         </header>

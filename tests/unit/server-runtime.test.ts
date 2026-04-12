@@ -219,6 +219,30 @@ export default function styledRoute() {
 }
 `,
     );
+    await writeRouteModule(
+      appDir,
+      path.join("docs", "[...parts]", "index.ts"),
+      `import { html, type RouteProps } from "elemental";
+
+export default function docsRoute(props: RouteProps) {
+  const parts = Array.isArray(props.params.parts) ? props.params.parts.join("/") : "missing";
+
+  return html\`<article><h1>${"${parts}"}</h1><p>${"${props.data.joined}"}</p></article>\`;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      path.join("docs", "[...parts]", "index.server.ts"),
+      `export async function loader({ params }) {
+  const parts = Array.isArray(params.parts) ? params.parts : [];
+
+  return {
+    joined: parts.join("/"),
+  };
+}
+`,
+    );
 
     const result = await buildProject({
       appDir,
@@ -313,6 +337,21 @@ export default function styledRoute() {
     expect(body).toContain('<template shadowrootmode="open"><style>:host {');
     expect(body).toContain("& > span {");
     expect(body).not.toContain("&amp; &gt; span");
+  });
+
+  it("passes catch-all params through loader and route rendering", async () => {
+    const response = await handleElementalRequest(
+      new Request("http://example.com/docs/guides/install"),
+      {
+        distDir: outDir,
+        manifest,
+      },
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain("<h1>guides/install</h1>");
+    expect(body).toContain("<p>guides/install</p>");
   });
 
   it("bypasses layout composition when loader returns a Response", async () => {

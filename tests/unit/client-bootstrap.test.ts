@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   collectCustomElementDefinitions,
   isValidCustomElementTagName,
+  registerCustomElementDefinitions,
 } from "../../src/runtime/client/bootstrap.ts";
 
 describe("client bootstrap helpers", () => {
@@ -38,5 +39,39 @@ describe("client bootstrap helpers", () => {
     expect(isValidCustomElementTagName("fixture.card-item")).toBe(true);
     expect(isValidCustomElementTagName("fixturecard")).toBe(false);
     expect(isValidCustomElementTagName("Fixture-card")).toBe(false);
+  });
+
+  it("skips custom element registration when the tag is already defined", () => {
+    class FakeElement {}
+
+    class ExistingCard extends FakeElement {
+      static tagName = "existing-card";
+    }
+
+    class NewCard extends FakeElement {
+      static tagName = "new-card";
+    }
+
+    const definitions = new Map<string, unknown>([["existing-card", ExistingCard]]);
+    const registry = {
+      define: vi.fn<(tagName: string, constructor: unknown) => void>((tagName, constructor) => {
+        definitions.set(tagName, constructor);
+      }),
+      get: vi.fn<(tagName: string) => unknown>((tagName) => definitions.get(tagName)),
+    };
+
+    registerCustomElementDefinitions(
+      {
+        ExistingCard,
+        NewCard,
+      },
+      registry,
+      FakeElement,
+    );
+
+    expect(registry.define).toHaveBeenCalledTimes(1);
+    expect(registry.define).toHaveBeenCalledWith("new-card", NewCard);
+    expect(registry.get).toHaveBeenCalledWith("existing-card");
+    expect(registry.get).toHaveBeenCalledWith("new-card");
   });
 });

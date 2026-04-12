@@ -77,6 +77,20 @@ export function collectCustomElementDefinitions(
   return definitions;
 }
 
+export function registerCustomElementDefinitions(
+  moduleNamespace: BrowserModuleNamespace,
+  customElementRegistry: Pick<CustomElementRegistry, "define" | "get">,
+  elementBaseClass: abstract new (...args: never[]) => object,
+): void {
+  for (const definition of collectCustomElementDefinitions(moduleNamespace, elementBaseClass)) {
+    if (customElementRegistry.get(definition.tagName) !== undefined) {
+      continue;
+    }
+
+    customElementRegistry.define(definition.tagName, definition.constructor);
+  }
+}
+
 export function isValidCustomElementTagName(tagName: string): boolean {
   return /^[a-z](?:[.0-9_a-z-]*-[.0-9_a-z-]*)$/u.test(tagName);
 }
@@ -439,13 +453,7 @@ function getRouteScriptAssets(route: MatchedManifestRoute["route"]): string[] {
 }
 
 function registerCustomElements(moduleNamespace: BrowserModuleNamespace): void {
-  for (const definition of collectCustomElementDefinitions(moduleNamespace, HTMLElement)) {
-    if (customElements.get(definition.tagName) !== undefined) {
-      continue;
-    }
-
-    customElements.define(definition.tagName, definition.constructor);
-  }
+  registerCustomElementDefinitions(moduleNamespace, customElements, HTMLElement);
 }
 
 async function replaceEntireDocument(response: Response): Promise<void> {
@@ -513,12 +521,19 @@ function applyHistory(url: URL, historyMode: NavigationHistoryMode): void {
 }
 
 function fallbackToDocumentNavigation(url: URL, replace: boolean): void {
-  if (replace) {
-    window.location.replace(url.href);
-    return;
-  }
+  window.setTimeout(() => {
+    if (window.location.href === url.href) {
+      window.location.reload();
+      return;
+    }
 
-  window.location.assign(url.href);
+    if (replace) {
+      window.location.replace(url.href);
+      return;
+    }
+
+    window.location.assign(url.href);
+  }, 0);
 }
 
 function shouldInterceptLinkNavigation(
