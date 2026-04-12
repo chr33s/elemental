@@ -1,0 +1,14 @@
+{
+  "inputs": [],
+  "servers": {
+    "chrome-devtools": {
+      "args": [
+        "chrome-devtools-mcp@latest",
+        "--no-performance-crux",
+        "--no-usage-statistics",
+        "--user-data-dir=/tmp/chrome-debug"
+      ],
+      "command": "npx"
+    }
+  }
+}
