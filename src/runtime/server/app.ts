@@ -371,11 +371,14 @@ function createResolvedAssets(
   manifest: BuildManifest,
   route: BuildManifestRoute,
 ): RouterPayload["assets"] {
+  const cssAssets = route.assets.css ?? route.assets.layoutCss ?? [];
+  const jsAssets = route.assets.js ?? route.assets.scripts ?? [];
+
   return {
-    scripts: [manifest.assets.clientEntry, ...route.assets.scripts]
+    scripts: [manifest.assets.clientEntry, ...jsAssets]
       .filter((entryPath): entryPath is string => entryPath !== undefined)
       .map((entryPath) => `/${entryPath}`),
-    stylesheets: route.assets.layoutCss.map((entryPath) => `/${entryPath}`),
+    stylesheets: cssAssets.map((entryPath) => `/${entryPath}`),
   };
 }
 

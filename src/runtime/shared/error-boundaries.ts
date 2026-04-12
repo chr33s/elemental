@@ -233,15 +233,15 @@ function findDeepestMatchingDirectory(
   appDir: string,
 ):
   | {
-    directory: ManifestDirectory;
-    match: DirectoryMatch;
-  }
-  | undefined {
-  let bestMatch:
-    | {
       directory: ManifestDirectory;
       match: DirectoryMatch;
     }
+  | undefined {
+  let bestMatch:
+    | {
+        directory: ManifestDirectory;
+        match: DirectoryMatch;
+      }
     | undefined;
 
   for (const directory of directories.values()) {

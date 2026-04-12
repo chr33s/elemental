@@ -3,8 +3,10 @@ import path from "node:path";
 
 export interface BuildManifestRoute {
   assets: {
-    layoutCss: string[];
-    scripts: string[];
+    css?: string[];
+    js?: string[];
+    layoutCss?: string[];
+    scripts?: string[];
   };
   browser: {
     errorBoundaries: string[];

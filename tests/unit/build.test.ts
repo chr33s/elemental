@@ -165,9 +165,11 @@ export default function docsPage() {
         layouts: [`${relativeAppDir}/layout.ts`],
         serverErrorBoundaries: [`${relativeAppDir}/error.server.ts`],
       });
-      expect(route.assets.layoutCss).toHaveLength(1);
-      expect(route.assets.layoutCss[0]).toMatch(/^assets\/.+\.css$/u);
-      expect(route.assets.scripts).toHaveLength(3);
+      expect(route.assets.css).toEqual(route.assets.layoutCss);
+      expect(route.assets.js).toEqual(route.assets.scripts);
+      expect(route.assets.layoutCss ?? []).toHaveLength(1);
+      expect(route.assets.layoutCss?.[0]).toMatch(/^assets\/.+\.css$/u);
+      expect(route.assets.scripts ?? []).toHaveLength(3);
       expect(route.browser.layouts).toHaveLength(1);
       expect(route.browser.errorBoundaries).toHaveLength(1);
       expect(route.browser.route).toMatch(/^assets\/.+\.js$/u);
@@ -511,12 +513,14 @@ export default function serverErrorBoundary() {
     const route = manifest.routes.find((entry) => entry.pattern === "/");
 
     expect(route).toBeDefined();
+    expect(route?.assets.css).toEqual(route?.assets.layoutCss);
+    expect(route?.assets.js).toEqual(route?.assets.scripts);
     expect(route?.assets.layoutCss).toHaveLength(1);
     expect(route?.assets.scripts).toHaveLength(3);
     expect(route?.server.routeServer).toMatch(/^server\/.+\.js$/u);
 
     const layoutCssText = await readFile(
-      path.join(outDir, route?.assets.layoutCss[0] ?? ""),
+      path.join(outDir, route?.assets.layoutCss?.[0] ?? ""),
       "utf8",
     );
     expect(layoutCssText).toContain("background: papayawhip");

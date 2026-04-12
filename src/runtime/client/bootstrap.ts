@@ -41,6 +41,7 @@ interface ViewTransitionLike {
 
 interface BootstrapState {
   currentRoute?: MatchedManifestRoute;
+  loadedScriptModules: Set<string>;
   manifest: BuildManifest;
 }
 
@@ -83,6 +84,7 @@ export function isValidCustomElementTagName(tagName: string): boolean {
 async function bootstrap(): Promise<void> {
   const state: BootstrapState = {
     currentRoute: undefined,
+    loadedScriptModules: new Set<string>(),
     manifest: await loadManifest(),
   };
 
@@ -112,7 +114,7 @@ async function primeCurrentRoute(state: BootstrapState): Promise<void> {
     return;
   }
 
-  await loadScriptModules(state.currentRoute.route.assets.scripts);
+  await loadScriptModules(state, getRouteScriptAssets(state.currentRoute.route));
 }
 
 function installNavigationInterceptors(state: BootstrapState): void {
@@ -273,7 +275,7 @@ async function applyNavigationPayload(
 
   try {
     await syncManagedStylesheets(payload.assets.stylesheets);
-    await loadScriptModules(payload.assets.scripts);
+    await loadScriptModules(state, payload.assets.scripts);
 
     await performViewTransition(async () => {
       renderRouteOutlet(payload.outlet);
@@ -409,16 +411,31 @@ async function waitForStylesheet(link: HTMLLinkElement): Promise<void> {
   });
 }
 
-async function loadScriptModules(scriptHrefs: string[]): Promise<void> {
+async function loadScriptModules(state: BootstrapState, scriptHrefs: string[]): Promise<void> {
+  const pendingScriptHrefs = [...new Set(scriptHrefs.map(normalizeAssetHref))].filter(
+    (scriptHref) => scriptHref !== import.meta.url && !state.loadedScriptModules.has(scriptHref),
+  );
+
+  if (pendingScriptHrefs.length === 0) {
+    return;
+  }
+
   const importedModules = await Promise.all(
-    [...new Set(scriptHrefs.map(normalizeAssetHref))]
-      .filter((scriptHref) => scriptHref !== import.meta.url)
-      .map((scriptHref) => import(scriptHref)),
+    pendingScriptHrefs.map(async (scriptHref) => {
+      const moduleNamespace = await import(scriptHref);
+
+      state.loadedScriptModules.add(scriptHref);
+      return moduleNamespace;
+    }),
   );
 
   for (const moduleNamespace of importedModules) {
     registerCustomElements(moduleNamespace);
   }
+}
+
+function getRouteScriptAssets(route: MatchedManifestRoute["route"]): string[] {
+  return route.assets.js ?? route.assets.scripts ?? [];
 }
 
 function registerCustomElements(moduleNamespace: BrowserModuleNamespace): void {

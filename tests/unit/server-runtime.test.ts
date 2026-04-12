@@ -191,6 +191,34 @@ export default function checkpointRoute() {
 }
 `,
     );
+    await writeRouteModule(
+      appDir,
+      path.join("styled", "card.css"),
+      `:host {
+  color: tomato;
+
+  & > span {
+    display: block;
+  }
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      path.join("styled", "index.ts"),
+      `import { html } from "elemental";
+import cardSheet from "./card.css";
+
+export default function styledRoute() {
+  const serverStyles =
+    typeof window === "undefined"
+      ? html\`<template shadowrootmode="open"><style>${"${cardSheet}"}</style><span>Styled card</span></template>\`
+      : html\`\`;
+
+  return html\`<section><styled-card>${"${serverStyles}"}</styled-card></section>\`;
+}
+`,
+    );
 
     const result = await buildProject({
       appDir,
@@ -272,6 +300,19 @@ export default function checkpointRoute() {
       `/${manifest.assets.clientEntry}`,
       ...route.assets.scripts.map((assetPath) => `/${assetPath}`),
     ]);
+  });
+
+  it("renders scoped CSS imports as raw inline style text during SSR", async () => {
+    const response = await handleElementalRequest(new Request("http://example.com/styled"), {
+      distDir: outDir,
+      manifest,
+    });
+    const body = await response.text();
+
+    expect(response.status).toBe(200);
+    expect(body).toContain('<template shadowrootmode="open"><style>:host {');
+    expect(body).toContain("& > span {");
+    expect(body).not.toContain("&amp; &gt; span");
   });
 
   it("bypasses layout composition when loader returns a Response", async () => {

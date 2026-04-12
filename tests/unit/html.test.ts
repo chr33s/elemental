@@ -1,4 +1,4 @@
-import { HtmlResult, html, renderToString, safeHtml } from "elemental";
+import { HtmlResult, cssText, html, renderToString, safeHtml } from "elemental";
 import { describe, expect, it } from "vitest";
 
 describe("html", () => {
@@ -45,6 +45,16 @@ describe("html", () => {
     );
   });
 
+  it("renders branded CSS text raw inside style tags", () => {
+    const result = html`<style>
+      ${cssText(`:host { color: tomato; & > span { display: block; } }`)}
+    </style>`;
+
+    expect(compactWhitespace(renderToString(result))).toBe(
+      "<style>:host { color: tomato; & > span { display: block; } }</style>",
+    );
+  });
+
   it("rejects direct HtmlResult construction", () => {
     expect(() => new HtmlResult("<strong>unsafe</strong>")).toThrow(
       "HtmlResult cannot be constructed directly. Use html`...` or safeHtml().",
@@ -54,4 +64,12 @@ describe("html", () => {
 
 function compactHtml(value: string): string {
   return value.replaceAll(/>\s+</g, "><").trim();
+}
+
+function compactWhitespace(value: string): string {
+  return value
+    .replaceAll(/\s+/g, " ")
+    .replaceAll(/<style> /g, "<style>")
+    .replaceAll(/ <\/style>/g, "</style>")
+    .trim();
 }

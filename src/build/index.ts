@@ -196,6 +196,8 @@ function createManifestRoute(options: {
 
   return {
     assets: {
+      css: layoutCssAssets,
+      js: [...browserLayouts, ...browserErrorBoundaries, browserRoute],
       layoutCss: layoutCssAssets,
       scripts: [...browserLayouts, ...browserErrorBoundaries, browserRoute],
     },
@@ -423,7 +425,12 @@ function createCssModulePlugin(target: "browser" | "server"): Plugin {
                   `export default sheet;`,
                   "",
                 ].join("\n")
-              : `const cssText = ${JSON.stringify(sourceText)};\nexport default cssText;\n`,
+              : [
+                  `import { cssText } from "elemental";`,
+                  `const stylesheet = cssText(${JSON.stringify(sourceText)});`,
+                  `export default stylesheet;`,
+                  "",
+                ].join("\n"),
           loader: "js",
         };
       });
