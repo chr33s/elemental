@@ -2,7 +2,21 @@
 
 ## Summary
 
-Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules in `index.server.ts`, and `layout.ts` as both the layout render module and layout client component module.
+Elemental v0 is a runtime-SSR meta-framework for native Web Components where:
+
+- routes are defined by directories containing `index.ts`,
+- route rendering is defined primarily by the default export in `index.ts`,
+- route logic lives in optional `index.server.ts`,
+- layouts are defined by `layout.ts` and `layout.css`,
+- layout rendering is defined by the default export in `layout.ts`,
+- routing is filesystem-based,
+- component tag names are explicit via `static tagName`,
+- client registration is automatic in the browser runtime,
+- client enhancement happens through native custom element upgrade,
+- the `html` helper auto-quotes attribute interpolations and escapes values by default,
+- error handling is minimal: unmatched routes return 404, thrown errors return 500,
+- middleware is a non-goal; per-route guards use `index.server.ts` default exports, and
+- the build manifest provides a structured map of routes, modules, and assets.
 
 v0 intentionally focuses on a single rendering model: runtime SSR. There is no mode flag in v0.
 
@@ -1042,23 +1056,3 @@ export async function loader({ params }: RouteServerContext) {
   };
 }
 ```
-
----
-
-## Final v0 position
-
-Elemental v0 is a runtime-SSR framework for Web Components where:
-
-- routes are defined by directories containing `index.ts`,
-- route rendering is defined primarily by the default export in `index.ts`,
-- route logic lives in optional `index.server.ts`,
-- layouts are defined by `layout.ts` and `layout.css`,
-- layout rendering is defined by the default export in `layout.ts`,
-- routing is filesystem-based,
-- component tag names are explicit via `static tagName`,
-- client registration is automatic in the browser runtime,
-- client enhancement happens through native custom element upgrade,
-- the `html` helper auto-quotes attribute interpolations and escapes values by default,
-- error handling is minimal: unmatched routes return 404, thrown errors return 500,
-- middleware is a non-goal; per-route guards use `index.server.ts` default exports, and
-- the build manifest provides a structured map of routes, modules, and assets.
