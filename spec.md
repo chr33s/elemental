@@ -2,7 +2,7 @@
 
 ## Summary
 
-Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules via `index.server.ts`, and `layout.ts` as the layout render module and layout client component module.
+Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules in `index.server.ts`, and `layout.ts` as both the layout render module and layout client component module.
 
 v0 intentionally focuses on a single rendering model: runtime SSR. There is no mode flag in v0.
 
@@ -30,6 +30,7 @@ v0 intentionally focuses on a single rendering model: runtime SSR. There is no m
 - Tag-name inference from class names or export names.
 - Requiring virtual DOM hydration or reconciliation.
 - A custom HTML template DSL.
+- Middleware or request lifecycle hooks. Per-route guards can be implemented using `index.server.ts` default exports, which fully own the route response and can return redirects or error responses before rendering occurs.
 
 ---
 
@@ -151,7 +152,7 @@ Nested layouts compose by wrapping the already-rendered child content from leaf 
 
 ### Asset composition
 
-For a matched route, Elemental includes all ancestor layout assets in root-to-leaf order, followed by the route’s own assets.
+For a matched route, Elemental includes all ancestor layout assets in root-to-leaf order, followed by the route's own assets.
 
 This applies to:
 
@@ -176,6 +177,7 @@ When Elemental executes the default export from `layout.ts`, it provides:
 ```ts
 type LayoutRenderProps = {
   content: HtmlResult;
+  params: Record<string, string | string[]>;
   url: URL;
 };
 ```
@@ -183,6 +185,7 @@ type LayoutRenderProps = {
 Where:
 
 - `content` is the already-rendered child route or child layout content,
+- `params` comes from route matching,
 - `url` is the request URL.
 
 ### Default export contract
@@ -290,7 +293,7 @@ Each route defines its default body renderer in `index.ts`.
 
 Top-level code should avoid direct access to browser-only globals unless guarded.
 
-Elemental may compile separate server and browser bundles from `index.ts`. The authoring contract is unified, but emitted runtime code may differ by environment.
+Elemental compiles separate server and browser bundles from `index.ts`. Named exports that define custom element classes (subclasses of `HTMLElement`) are excluded from the server bundle. The default export is included in both bundles. This means authors write a single file, but the framework ensures that browser-only code such as custom element class bodies does not execute on the server.
 
 ### Default export contract
 
@@ -303,7 +306,7 @@ import { html } from 'elemental';
 
 export default function component(props: RouteRenderProps) {
   return html`
-    <el-blog-post slug=${props.params.slug}></el-blog-post>
+    <el-blog-post slug="${props.params.slug}"></el-blog-post>
     <el-blog-sidebar></el-blog-sidebar>
   `;
 }
@@ -311,7 +314,7 @@ export default function component(props: RouteRenderProps) {
 
 ### Rendering model
 
-Route rendering uses standard JavaScript plus Elemental’s tagged template helpers:
+Route rendering uses standard JavaScript plus Elemental's tagged template helpers:
 
 ```ts
 import { html, safeHtml } from 'elemental';
@@ -340,6 +343,7 @@ The `html` tagged template escapes interpolated values by default.
 Elemental should:
 
 - HTML-escape strings by default,
+- auto-quote attribute-position interpolations,
 - flatten arrays,
 - ignore `null`, `undefined`, and `false`,
 - stringify primitive values,
@@ -397,7 +401,7 @@ import sheet from './post.css';
 
 export default function component(props: RouteRenderProps) {
   return html`
-    <el-blog-post slug=${props.params.slug}></el-blog-post>
+    <el-blog-post slug="${props.params.slug}"></el-blog-post>
     <el-blog-sidebar></el-blog-sidebar>
   `;
 }
@@ -408,6 +412,7 @@ export class BlogPost extends HTMLElement {
   connectedCallback() {
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.adoptedStyleSheets = [sheet];
+    // Note: innerHTML is not escaped. Only use with trusted or sanitized content.
     root.innerHTML = `
       <article>
         <h1>${this.getAttribute('slug') ?? ''}</h1>
@@ -447,7 +452,7 @@ Server-side imports of `index.ts` must not attempt to access `customElements`.
 
 Top-level code should avoid direct access to browser-only globals unless guarded.
 
-Elemental may compile separate server and browser bundles from `layout.ts`. The authoring contract is unified, but emitted runtime code may differ by environment.
+Elemental compiles separate server and browser bundles from `layout.ts`. Named exports that define custom element classes (subclasses of `HTMLElement`) are excluded from the server bundle. The default export is included in both bundles. This means authors write a single file, but the framework ensures that browser-only code such as custom element class bodies does not execute on the server.
 
 ### Default export
 
@@ -530,6 +535,26 @@ Server-side imports of `layout.ts` must not attempt to access `customElements`.
 
 ---
 
+## Route server context
+
+When Elemental executes `loader()`, `action()`, or the default export from `index.server.ts`, it provides a context object:
+
+```ts
+type RouteServerContext = {
+  request: Request;
+  params: Record<string, string | string[]>;
+  url: URL;
+};
+```
+
+Where:
+
+- `request` is the incoming `Request` object,
+- `params` comes from route matching,
+- `url` is the request URL.
+
+---
+
 ## Route server module API
 
 Each route may define a `index.server.ts`.
@@ -538,21 +563,21 @@ Each route may define a `index.server.ts`.
 
 A route server module may export:
 
-- `loader(ctx)` for route data loading.
-- `action(ctx)` for form submissions and mutations.
+- `loader(ctx: RouteServerContext)` for route data loading.
+- `action(ctx: RouteServerContext)` for form submissions and mutations.
 
 ### Optional default export
 
 A route server module may optionally export a default handler.
 
-If the default handler returns a `Response`, it fully owns the route response. No layout composition is applied.
+If the default handler returns a `Response`, it fully owns the route response. No layout composition is applied. This can be used as a per-route guard for authentication, authorization, or redirects.
 
 If a route defines a default export in `index.server.ts`, `loader()` must not also be used in that same route.
 
 ### Example: default path
 
 ```ts
-export async function loader(ctx) {
+export async function loader(ctx: RouteServerContext) {
   return {
     slug: ctx.params.slug
   };
@@ -564,7 +589,7 @@ In this case, Elemental executes the default export from `index.ts` using the lo
 ### Example: full response ownership
 
 ```ts
-export default async function Component(ctx) {
+export default async function component(ctx: RouteServerContext) {
   return new Response('Unauthorized', { status: 401 });
 }
 ```
@@ -581,11 +606,14 @@ In this case, the route bypasses normal `index.ts` rendering and layout composit
 - Used during initial document requests.
 - Used during client-side navigations for GET requests.
 - Provides data for the default export in `index.ts`.
+- Must return a plain, serializable object. The return value becomes `data` in `RouteRenderProps`.
+- May return a `Response` to short-circuit rendering (e.g., for redirects or error responses). When a `Response` is returned, layout composition is skipped and the response is sent directly.
+- If `loader()` throws, Elemental returns a 500 response. See the error handling section for details.
 
 Example:
 
 ```ts
-export async function loader({ params }) {
+export async function loader({ params }: RouteServerContext) {
   return {
     slug: params.slug,
     title: 'Hello World',
@@ -603,7 +631,7 @@ export async function loader({ params }) {
 Example:
 
 ```ts
-export async function action(ctx) {
+export async function action(ctx: RouteServerContext) {
   const form = await ctx.request.formData();
   const title = form.get('title');
 
@@ -631,6 +659,8 @@ Examples:
 - `src/layout.css`
 - `src/dashboard/layout.css`
 
+`layout.css` files are not directly importable. Elemental automatically injects them into the document `<head>` as `<link>` tags for all routes within the layout's scope.
+
 ### Scoped CSS
 
 Non-layout `*.css` files compile to `CSSStyleSheet` instances for use with `adoptedStyleSheets`.
@@ -649,6 +679,96 @@ class BlogPost extends HTMLElement {
 ```
 
 Preferred usage is with Shadow DOM and `adoptedStyleSheets`.
+
+### CSS import resolution
+
+- In the browser bundle, `import sheet from './post.css'` resolves to a `CSSStyleSheet` instance.
+- In the server bundle, CSS imports resolve to no-ops. Elemental handles CSS injection separately through asset composition.
+- TypeScript authors should declare an ambient module for CSS imports:
+
+```ts
+// src/env.d.ts
+declare module '*.css' {
+  const sheet: CSSStyleSheet;
+  export default sheet;
+}
+```
+
+---
+
+## Head management
+
+In v0, the root layout owns the `<head>` element. Routes cannot inject `<title>`, `<meta>`, or other `<head>` content upward into the layout from `index.ts`.
+
+For dynamic head content:
+
+- Static head content (charset, viewport) should be defined in the root layout.
+- Route-specific head content can be managed on the client by custom elements that manipulate `document.head` in their `connectedCallback`.
+
+Example:
+
+```ts
+export class PageMeta extends HTMLElement {
+  static tagName = 'el-page-meta';
+
+  connectedCallback() {
+    const title = this.getAttribute('title');
+    if (title) document.title = title;
+  }
+}
+```
+
+Used in a route:
+
+```ts
+export default function component(props: RouteRenderProps) {
+  return html`
+    <el-page-meta title="${props.data.title}"></el-page-meta>
+    <h1>${props.data.title}</h1>
+  `;
+}
+```
+
+A dedicated `head()` export or server-side head composition may be introduced in a future version.
+
+---
+
+## Error handling
+
+Elemental v0 uses a minimal error model.
+
+### Unmatched routes (404)
+
+If no route matches the request URL, Elemental returns a plain `404 Not Found` response. There is no custom 404 page convention in v0.
+
+### Loader or render errors (500)
+
+If `loader()`, `action()`, or the default export from `index.ts` or `layout.ts` throws during execution, Elemental catches the error and returns a plain `500 Internal Server Error` response. The error is logged to stderr.
+
+Layout composition is not applied to error responses.
+
+### Custom error responses
+
+Routes that need custom error handling can use the `index.server.ts` default export to catch errors and return a custom `Response`:
+
+```ts
+export default async function component(ctx: RouteServerContext) {
+  try {
+    const data = await fetchData(ctx.params.slug);
+    return data;
+  } catch (err) {
+    return new Response('Not Found', { status: 404 });
+  }
+}
+```
+
+### Non-goals for v0
+
+- `error.ts` convention for custom error pages.
+- Per-layout error boundaries.
+- Granular error recovery.
+
+These may be introduced in a future version.
 
 ---
 
@@ -670,6 +790,8 @@ A request flows through the framework as follows:
 10. auto-register exported custom elements,
 11. upgrade custom elements natively.
 
+If any step (3–6) throws, Elemental returns a `500` response and logs the error. If no route matches at step 1, Elemental returns a `404` response.
+
 The framework does not use virtual DOM hydration. Client-side enhancement is based on native custom element upgrade.
 
 ---
@@ -689,6 +811,31 @@ The client router is responsible for:
 - extracting and swapping the current route outlet,
 - loading route client modules,
 - preserving history and redirects.
+
+### Route outlet
+
+The route outlet is the DOM subtree that is replaced during client-side navigations. Elemental identifies the outlet as the element marked with the `data-route-outlet` attribute.
+
+The outermost layout should mark the content insertion point:
+
+```ts
+export default function layout(props: LayoutRenderProps) {
+  return html`
+    <!doctype html>
+    <html>
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+      </head>
+      <body>
+        <div data-route-outlet>${props.content}</div>
+      </body>
+    </html>
+  `;
+}
+```
+
+During client navigation, the router fetches the next document, extracts the element with `data-route-outlet`, and replaces the current outlet's contents with the new content.
 
 ### Route transitions
 
@@ -723,7 +870,36 @@ dist/
   manifest.json
 ```
 
-Possible manifest contents include route metadata and asset mappings.
+### Manifest
+
+The manifest describes the route tree and its associated assets:
+
+```ts
+type ManifestRoute = {
+  pattern: string;
+  module: string;
+  serverModule?: string;
+  layouts: string[];
+  assets: {
+    css: string[];
+    js: string[];
+  };
+};
+
+type Manifest = {
+  routes: Record<string, ManifestRoute>;
+};
+```
+
+Where:
+
+- keys in `routes` are the route path patterns (e.g., `/`, `/blog/:slug`),
+- `pattern` is the URL pattern string,
+- `module` is the client bundle path for `index.ts`,
+- `serverModule` is the server bundle path for `index.server.ts` (if present),
+- `layouts` is an ordered list of layout bundle paths from root to leaf,
+- `assets.css` lists all CSS asset paths (layout and route),
+- `assets.js` lists all JS asset paths (layout and route).
 
 ---
 
@@ -736,6 +912,7 @@ Possible manifest contents include route metadata and asset mappings.
 - Unified layout render and component module through `layout.ts`.
 - `html` and `safeHtml` instead of a custom HTML DSL.
 - Escaped-by-default template interpolation.
+- Auto-quoted attribute-position interpolations.
 - Native browser upgrade over virtual DOM hydration.
 - Scoped styling by default.
 - Convention first, with `index.server.ts` default export as a full-response escape hatch.
@@ -759,7 +936,7 @@ export default function layout(props: LayoutRenderProps) {
       </head>
       <body>
         <el-app-shell>
-          ${props.content}
+          <div data-route-outlet>${props.content}</div>
         </el-app-shell>
       </body>
     </html>
@@ -783,7 +960,8 @@ import sheet from './post.css';
 
 export default function component(props: RouteRenderProps) {
   return html`
-    <el-blog-post slug=${props.params.slug}></el-blog-post>
+    <el-page-meta title="${props.data.title}"></el-page-meta>
+    <el-blog-post slug="${props.params.slug}"></el-blog-post>
     <el-blog-sidebar></el-blog-sidebar>
   `;
 }
@@ -794,6 +972,7 @@ export class BlogPost extends HTMLElement {
   connectedCallback() {
     const root = this.shadowRoot ?? this.attachShadow({ mode: 'open' });
     root.adoptedStyleSheets = [sheet];
+    // Note: innerHTML is not escaped. Only use with trusted or sanitized content.
     root.innerHTML = `
       <article>
         <h1>${this.getAttribute('slug') ?? ''}</h1>
@@ -815,7 +994,7 @@ export class BlogSidebar extends HTMLElement {
 ### `src/blog/[slug]/index.server.ts`
 
 ```ts
-export async function loader({ params }) {
+export async function loader({ params }: RouteServerContext) {
   return {
     slug: params.slug,
     title: 'Hello World'
@@ -836,5 +1015,9 @@ Elemental v0 is a runtime-SSR framework for Web Components where:
 - layout rendering is defined by the default export in `layout.ts`,
 - routing is filesystem-based,
 - component tag names are explicit via `static tagName`,
-- client registration is automatic in the browser runtime, and
-- client enhancement happens through native custom element upgrade.
+- client registration is automatic in the browser runtime,
+- client enhancement happens through native custom element upgrade,
+- the `html` helper auto-quotes attribute interpolations and escapes values by default,
+- error handling is minimal: unmatched routes return 404, thrown errors return 500,
+- middleware is a non-goal; per-route guards use `index.server.ts` default exports, and
+- the build manifest provides a structured map of routes, modules, and assets.
