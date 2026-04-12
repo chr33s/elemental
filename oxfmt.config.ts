@@ -1,0 +1,10 @@
+import { defineConfig } from "oxfmt";
+
+export default defineConfig({
+  $schema: "./node_modules/oxfmt/configuration_schema.json",
+  experimentalSortImports: {
+    internalPattern: ["#"],
+    newlinesBetween: false,
+  },
+  experimentalSortPackageJson: true,
+});
