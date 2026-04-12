@@ -14,6 +14,7 @@ export interface DiscoveredRoute {
   directoryPath: string;
   errorBoundaries: string[];
   filePath: string;
+  layoutStylesheets: string[];
   layouts: string[];
   parsedSegments: DiscoveredRouteSegment[];
   pattern: string;
@@ -26,6 +27,7 @@ interface DiscoveredDirectory {
   directoryPath: string;
   errorBoundaryFilePath?: string;
   layoutFilePath?: string;
+  layoutStylesheetFilePath?: string;
   routeFilePath?: string;
   routeServerFilePath?: string;
   segments: string[];
@@ -60,6 +62,9 @@ async function walk(
       ? path.join(currentDir, "error.ts")
       : undefined,
     layoutFilePath: fileNames.has("layout.ts") ? path.join(currentDir, "layout.ts") : undefined,
+    layoutStylesheetFilePath: fileNames.has("layout.css")
+      ? path.join(currentDir, "layout.css")
+      : undefined,
     routeFilePath: fileNames.has("index.ts") ? path.join(currentDir, "index.ts") : undefined,
     routeServerFilePath: fileNames.has("index.server.ts")
       ? path.join(currentDir, "index.server.ts")
@@ -98,6 +103,9 @@ function createDiscoveredRoute(
       ancestor.errorBoundaryFilePath === undefined ? [] : [ancestor.errorBoundaryFilePath],
     ),
     filePath: directory.routeFilePath ?? path.join(directory.directoryPath, "index.ts"),
+    layoutStylesheets: ancestors.flatMap((ancestor) =>
+      ancestor.layoutStylesheetFilePath === undefined ? [] : [ancestor.layoutStylesheetFilePath],
+    ),
     layouts: ancestors.flatMap((ancestor) =>
       ancestor.layoutFilePath === undefined ? [] : [ancestor.layoutFilePath],
     ),

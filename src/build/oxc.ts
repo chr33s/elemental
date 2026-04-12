@@ -19,11 +19,7 @@ interface ModuleRecord {
 
 export async function validateModuleWithOxc(filePath: string): Promise<void> {
   const sourceText = await readFile(filePath, "utf8");
-  const result = parseSync(filePath, sourceText, {
-    lang: languageForPath(filePath),
-    range: true,
-    sourceType: "module",
-  });
+  const result = parseModuleWithOxc(filePath, sourceText);
   const syntaxErrors = result.errors.map((error) => error.codeframe ?? error.message);
   const conventionErrors = collectConventionErrors(
     filePath,
@@ -38,6 +34,130 @@ export async function validateModuleWithOxc(filePath: string): Promise<void> {
   throw new Error(
     `oxc validation failed for ${filePath}\n\n${[...syntaxErrors, ...conventionErrors].join("\n\n")}`,
   );
+}
+
+export function stripNamedHTMLElementExportsFromServerModule(
+  filePath: string,
+  sourceText: string,
+): string {
+  const result = parseModuleWithOxc(filePath, sourceText);
+  const exportedElementNames = new Set(
+    collectExportedHTMLElementClasses(result.program, result.module as ModuleRecord).map(
+      (exportedClass) => exportedClass.name,
+    ),
+  );
+
+  if (exportedElementNames.size === 0) {
+    return sourceText;
+  }
+
+  const programNode = asNode(result.program);
+  const body = Array.isArray(programNode?.body) ? programNode.body : [];
+  const edits: Array<{ end: number; start: number; text: string }> = [];
+
+  for (const statement of body) {
+    const node = asNode(statement);
+    const range = getNodeRange(node);
+
+    if (node === null || range === undefined) {
+      continue;
+    }
+
+    if (node.type === "ClassDeclaration") {
+      const className = getIdentifierName(node.id);
+
+      if (
+        className !== undefined &&
+        exportedElementNames.has(className) &&
+        extendsHTMLElement(node)
+      ) {
+        edits.push({
+          end: range[1],
+          start: range[0],
+          text: "",
+        });
+      }
+
+      continue;
+    }
+
+    if (node.type !== "ExportNamedDeclaration") {
+      continue;
+    }
+
+    const declaration = asNode(node.declaration);
+
+    if (declaration?.type === "ClassDeclaration") {
+      const className = getIdentifierName(declaration.id);
+
+      if (
+        className !== undefined &&
+        exportedElementNames.has(className) &&
+        extendsHTMLElement(declaration)
+      ) {
+        edits.push({
+          end: range[1],
+          start: range[0],
+          text: "",
+        });
+      }
+
+      continue;
+    }
+
+    if (declaration !== null) {
+      continue;
+    }
+
+    const specifiers = Array.isArray(node.specifiers) ? node.specifiers : [];
+    const keptSpecifiers = specifiers.filter((specifier) => {
+      const localName = getIdentifierName(asNode(specifier)?.local);
+
+      return localName === undefined || !exportedElementNames.has(localName);
+    });
+
+    if (keptSpecifiers.length === specifiers.length) {
+      continue;
+    }
+
+    if (keptSpecifiers.length === 0) {
+      edits.push({
+        end: range[1],
+        start: range[0],
+        text: "",
+      });
+      continue;
+    }
+
+    edits.push({
+      end: range[1],
+      start: range[0],
+      text: buildExportDeclarationReplacement(node, keptSpecifiers),
+    });
+  }
+
+  if (edits.length === 0) {
+    return sourceText;
+  }
+
+  edits.sort((left, right) => right.start - left.start);
+
+  let transformedSource = sourceText;
+
+  for (const edit of edits) {
+    transformedSource =
+      transformedSource.slice(0, edit.start) + edit.text + transformedSource.slice(edit.end);
+  }
+
+  return transformedSource;
+}
+
+function parseModuleWithOxc(filePath: string, sourceText: string) {
+  return parseSync(filePath, sourceText, {
+    lang: languageForPath(filePath),
+    range: true,
+    sourceType: "module",
+  });
 }
 
 function collectConventionErrors(
@@ -218,6 +338,42 @@ function getNamedExportLocalNames(moduleRecord: ModuleRecord): Set<string> {
   return localNames;
 }
 
+function buildExportDeclarationReplacement(node: LooseNode, specifiers: unknown[]): string {
+  const prefixes: string[] = [];
+
+  if (node.exportKind === "type") {
+    prefixes.push("type");
+  }
+
+  const renderedSpecifiers = specifiers
+    .map((specifier) => renderExportSpecifier(asNode(specifier)))
+    .filter((specifierText) => specifierText !== undefined);
+  const prefixText = prefixes.length === 0 ? "export" : `export ${prefixes.join(" ")}`;
+
+  return `${prefixText} { ${renderedSpecifiers.join(", ")} };`;
+}
+
+function renderExportSpecifier(specifier: LooseNode | null): string | undefined {
+  if (specifier?.type !== "ExportSpecifier") {
+    return undefined;
+  }
+
+  const localName = getIdentifierName(specifier.local);
+  const exportedName = getIdentifierName(specifier.exported);
+
+  if (localName === undefined || exportedName === undefined) {
+    return undefined;
+  }
+
+  const typePrefix = specifier.exportKind === "type" ? "type " : "";
+
+  if (localName === exportedName) {
+    return `${typePrefix}${localName}`;
+  }
+
+  return `${typePrefix}${localName} as ${exportedName}`;
+}
+
 function asNode(value: unknown): LooseNode | null {
   if (value === null || typeof value !== "object") {
     return null;
@@ -234,6 +390,20 @@ function getIdentifierName(value: unknown): string | undefined {
   }
 
   return node.name;
+}
+
+function getNodeRange(node: LooseNode | null): [number, number] | undefined {
+  if (node === null || !Array.isArray(node.range) || node.range.length !== 2) {
+    return undefined;
+  }
+
+  const [start, end] = node.range;
+
+  if (typeof start !== "number" || typeof end !== "number") {
+    return undefined;
+  }
+
+  return [start, end];
 }
 
 function extendsHTMLElement(classDeclaration: LooseNode): boolean {

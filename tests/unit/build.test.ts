@@ -53,6 +53,14 @@ export default function layout(props: LayoutProps) {
     );
     await writeRouteModule(
       appDir,
+      "layout.css",
+      `body {
+  color: tomato;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
       "error.ts",
       `import { html } from "elemental";
 
@@ -103,6 +111,7 @@ export default function docsPage() {
         directoryPath: path.join(appDir, "blog", "[slug]"),
         errorBoundaries: [path.join(appDir, "error.ts")],
         filePath: path.join(appDir, "blog", "[slug]", "index.ts"),
+        layoutStylesheets: [path.join(appDir, "layout.css")],
         layouts: [path.join(appDir, "layout.ts")],
         parsedSegments: [
           { kind: "static", raw: "blog", value: "blog" },
@@ -117,6 +126,7 @@ export default function docsPage() {
         directoryPath: path.join(appDir, "docs", "[...parts]"),
         errorBoundaries: [path.join(appDir, "error.ts")],
         filePath: path.join(appDir, "docs", "[...parts]", "index.ts"),
+        layoutStylesheets: [path.join(appDir, "layout.css")],
         layouts: [path.join(appDir, "layout.ts")],
         parsedSegments: [
           { kind: "static", raw: "docs", value: "docs" },
@@ -131,6 +141,7 @@ export default function docsPage() {
         directoryPath: appDir,
         errorBoundaries: [path.join(appDir, "error.ts")],
         filePath: path.join(appDir, "index.ts"),
+        layoutStylesheets: [path.join(appDir, "layout.css")],
         layouts: [path.join(appDir, "layout.ts")],
         parsedSegments: [],
         pattern: "/",
@@ -144,32 +155,31 @@ export default function docsPage() {
     const relativeAppDir = toPosixPath(path.relative(rootDir, appDir));
 
     expect(manifest.appDir).toBe(relativeAppDir);
-    expect(manifest.assets.clientEntry).toMatch(/^assets\/app-[^.]+\.js$/);
-    expect(manifest.routes).toEqual([
-      {
+    expect(manifest.assets.clientEntry).toMatch(/^assets\/.+\.js$/u);
+    expect(manifest.routes).toHaveLength(3);
+
+    for (const route of manifest.routes) {
+      expect(route).toMatchObject({
         errorBoundaries: [`${relativeAppDir}/error.ts`],
+        layoutStylesheets: [`${relativeAppDir}/layout.css`],
         layouts: [`${relativeAppDir}/layout.ts`],
-        pattern: "/blog/:slug",
         serverErrorBoundaries: [`${relativeAppDir}/error.server.ts`],
-        serverSource: undefined,
-        source: `${relativeAppDir}/blog/[slug]/index.ts`,
-      },
-      {
-        errorBoundaries: [`${relativeAppDir}/error.ts`],
-        layouts: [`${relativeAppDir}/layout.ts`],
-        pattern: "/docs/*parts",
-        serverErrorBoundaries: [`${relativeAppDir}/error.server.ts`],
-        serverSource: undefined,
-        source: `${relativeAppDir}/docs/[...parts]/index.ts`,
-      },
-      {
-        errorBoundaries: [`${relativeAppDir}/error.ts`],
-        layouts: [`${relativeAppDir}/layout.ts`],
-        pattern: "/",
-        serverErrorBoundaries: [`${relativeAppDir}/error.server.ts`],
-        serverSource: undefined,
-        source: `${relativeAppDir}/index.ts`,
-      },
+      });
+      expect(route.assets.layoutCss).toHaveLength(1);
+      expect(route.assets.layoutCss[0]).toMatch(/^assets\/.+\.css$/u);
+      expect(route.assets.scripts).toHaveLength(3);
+      expect(route.browser.layouts).toHaveLength(1);
+      expect(route.browser.errorBoundaries).toHaveLength(1);
+      expect(route.browser.route).toMatch(/^assets\/.+\.js$/u);
+      expect(route.server.layouts).toHaveLength(1);
+      expect(route.server.route).toMatch(/^server\/.+\.js$/u);
+      expect(route.server.serverErrorBoundaries).toHaveLength(1);
+    }
+
+    expect(manifest.routes.map((route) => route.pattern)).toEqual([
+      "/blog/:slug",
+      "/docs/*parts",
+      "/",
     ]);
     expect(result.clientFile).toBe(path.join(outDir, manifest.assets.clientEntry ?? ""));
     expect(result.serverFile).toBe(path.join(outDir, "server.js"));
@@ -402,6 +412,180 @@ export default function index() {
       }),
     ).rejects.toThrow(/must not be exported from server-only module/u);
   });
+
+  it("emits phase 4 browser and server assets with CSS target splitting", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-assets-"));
+    const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-assets-dist-"));
+
+    temporaryPaths.add(appDir);
+    temporaryPaths.add(outDir);
+
+    await writeRouteModule(
+      appDir,
+      "index.ts",
+      `import { html } from "elemental";
+import cardSheet from "./card.css";
+
+export default function index() {
+  const serverStyles =
+    typeof window === "undefined" ? html\`<style>${"${cardSheet}"}</style>\` : html\`\`;
+
+  return html\`${"${serverStyles}"}<fancy-card></fancy-card>\`;
+}
+
+export class FancyCard extends HTMLElement {
+  static tagName = "fancy-card";
+
+  connectedCallback() {
+    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+    root.adoptedStyleSheets = [cardSheet];
+  }
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "card.css",
+      `:host {
+  color: tomato;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "layout.ts",
+      `import { html, type LayoutProps } from "elemental";
+
+export default function layout(props: LayoutProps) {
+  return html\`<body>${"${props.outlet}"}</body>\`;
+}
+
+export class AppShellElement extends HTMLElement {
+  static tagName = "app-shell";
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "layout.css",
+      `body {
+  background: papayawhip;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "error.ts",
+      `import { html } from "elemental";
+
+export default function errorBoundary() {
+  return html\`<main>Browser Boundary</main>\`;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "error.server.ts",
+      `import { html } from "elemental";
+
+export default function serverErrorBoundary() {
+  return html\`<main>Server Boundary</main>\`;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "index.server.ts",
+      `export async function loader() {
+  return { secret: "server-only-value" };
+}
+`,
+    );
+
+    const result = await buildProject({
+      appDir,
+      outDir,
+      rootDir,
+    });
+    const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as BuildManifest;
+    const route = manifest.routes.find((entry) => entry.pattern === "/");
+
+    expect(route).toBeDefined();
+    expect(route?.assets.layoutCss).toHaveLength(1);
+    expect(route?.assets.scripts).toHaveLength(3);
+    expect(route?.server.routeServer).toMatch(/^server\/.+\.js$/u);
+
+    const layoutCssText = await readFile(
+      path.join(outDir, route?.assets.layoutCss[0] ?? ""),
+      "utf8",
+    );
+    expect(layoutCssText).toContain("background: papayawhip");
+
+    const browserRouteText = await readFile(path.join(outDir, route?.browser.route ?? ""), "utf8");
+    expect(browserRouteText).toContain("CSSStyleSheet");
+    expect(browserRouteText).toContain("replaceSync");
+    expect(browserRouteText).not.toContain("server-only-value");
+
+    const serverRouteText = await readFile(path.join(outDir, route?.server.route ?? ""), "utf8");
+    expect(serverRouteText).toContain(":host");
+    expect(serverRouteText).not.toContain("FancyCard");
+
+    const serverLayoutText = await readFile(
+      path.join(outDir, route?.server.layouts[0] ?? ""),
+      "utf8",
+    );
+    expect(serverLayoutText).not.toContain("AppShellElement");
+
+    const routeServerText = await readFile(
+      path.join(outDir, route?.server.routeServer ?? ""),
+      "utf8",
+    );
+    expect(routeServerText).toContain("server-only-value");
+  });
+
+  it("rejects browser-reachable imports of server-only route modules", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-boundary-"));
+    const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-boundary-dist-"));
+
+    temporaryPaths.add(appDir);
+    temporaryPaths.add(outDir);
+
+    await writeRouteModule(
+      appDir,
+      "index.ts",
+      `import { html } from "elemental";
+import { secret } from "./support.ts";
+
+export default function index() {
+  return html\`<main>${"${secret}"}</main>\`;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "support.ts",
+      `import "./index.server.ts";
+
+export const secret = "hidden";
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "index.server.ts",
+      `export async function loader() {
+  return { ok: true };
+}
+`,
+    );
+
+    await expect(
+      buildProject({
+        appDir,
+        outDir,
+        rootDir,
+      }),
+    ).rejects.toThrow(/must not import server-only module/u);
+  });
 });
 
 function summarizeRoute(route: DiscoveredRoute) {
@@ -409,6 +593,7 @@ function summarizeRoute(route: DiscoveredRoute) {
     directoryPath: route.directoryPath,
     errorBoundaries: route.errorBoundaries,
     filePath: route.filePath,
+    layoutStylesheets: route.layoutStylesheets,
     layouts: route.layouts,
     parsedSegments: route.parsedSegments,
     pattern: route.pattern,
