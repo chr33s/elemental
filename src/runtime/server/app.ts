@@ -9,6 +9,7 @@ import {
   resolveNearestServerErrorBoundaryForRoute,
 } from "../shared/error-boundaries.ts";
 import { html, type HtmlRenderable, type HtmlResult } from "../shared/html.ts";
+import { matchManifestRoute } from "../shared/routes.ts";
 import type {
   ErrorProps,
   LayoutProps,
@@ -16,7 +17,7 @@ import type {
   RouteProps,
   RouteServerContext,
 } from "../shared/types.ts";
-import { renderDocument, renderSubtree } from "./render-document.ts";
+import { createManagedHead, renderDocument, renderSubtree } from "./render-document.ts";
 
 export interface StartServerOptions {
   distDir: string;
@@ -81,11 +82,15 @@ export async function handleElementalRequest(
   const url = new URL(request.url);
   const resolver = createServerModuleResolver(options.distDir);
 
+  if (url.pathname === "/manifest.json") {
+    return serveAsset(url.pathname, options.distDir);
+  }
+
   if (url.pathname.startsWith("/assets/")) {
     return serveAsset(url.pathname, options.distDir);
   }
 
-  const matchedRoute = matchRoute(url.pathname, options.manifest.routes);
+  const matchedRoute = matchManifestRoute(url.pathname, options.manifest.routes);
 
   if (matchedRoute === undefined) {
     return renderServerErrorResponse({
@@ -375,9 +380,11 @@ function createResolvedAssets(
 }
 
 function composeAssetHead(routeHead: HtmlRenderable, assets: RouterPayload["assets"]): HtmlResult {
-  return html`${routeHead}${assets.stylesheets.map(
-    (stylesheetHref) => html`<link rel="stylesheet" href=${stylesheetHref} />`,
-  )}${assets.scripts.map((scriptHref) => html`<script type="module" src=${scriptHref}></script>`)}`;
+  return html`${createManagedHead({
+    head: routeHead,
+    scripts: assets.scripts,
+    stylesheets: assets.stylesheets,
+  })}`;
 }
 
 async function composeLayouts(options: {
@@ -466,89 +473,6 @@ async function sendNodeResponse(
   }
 
   nodeResponse.end(Buffer.from(await response.arrayBuffer()));
-}
-
-function matchRoute(
-  pathname: string,
-  routes: BuildManifestRoute[],
-):
-  | {
-      params: RouteParams;
-      route: BuildManifestRoute;
-    }
-  | undefined {
-  const pathnameSegments = splitPathSegments(pathname);
-
-  for (const route of routes) {
-    const params = matchRoutePattern(route.pattern, pathnameSegments);
-
-    if (params !== undefined) {
-      return {
-        params,
-        route,
-      };
-    }
-  }
-
-  return undefined;
-}
-
-function matchRoutePattern(pattern: string, pathnameSegments: string[]): RouteParams | undefined {
-  if (pattern === "/") {
-    return pathnameSegments.length === 0 ? {} : undefined;
-  }
-
-  const patternSegments = splitPathSegments(pattern);
-  const params: RouteParams = {};
-  let pathnameIndex = 0;
-
-  for (let patternIndex = 0; patternIndex < patternSegments.length; patternIndex += 1) {
-    const patternSegment = patternSegments[patternIndex];
-
-    if (patternSegment.startsWith("*")) {
-      const paramName = patternSegment.slice(1);
-      const remainingSegments = pathnameSegments.slice(pathnameIndex);
-
-      if (remainingSegments.length === 0) {
-        return undefined;
-      }
-
-      params[paramName] = remainingSegments;
-      pathnameIndex = pathnameSegments.length;
-      break;
-    }
-
-    const pathnameSegment = pathnameSegments[pathnameIndex];
-
-    if (pathnameSegment === undefined) {
-      return undefined;
-    }
-
-    if (patternSegment.startsWith(":")) {
-      params[patternSegment.slice(1)] = pathnameSegment;
-      pathnameIndex += 1;
-      continue;
-    }
-
-    if (patternSegment !== pathnameSegment) {
-      return undefined;
-    }
-
-    pathnameIndex += 1;
-  }
-
-  return pathnameIndex === pathnameSegments.length ? params : undefined;
-}
-
-function splitPathSegments(pathname: string): string[] {
-  if (pathname === "/") {
-    return [];
-  }
-
-  return pathname
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => decodeURIComponent(segment));
 }
 
 function normalizeRouteData(value: unknown): Record<string, unknown> {

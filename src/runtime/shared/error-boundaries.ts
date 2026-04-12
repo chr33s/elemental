@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
 import type { RouteParams } from "./types.ts";
 
@@ -72,7 +71,7 @@ function resolveNearestBoundaryForRoute(
   }
 
   return {
-    directoryPath: path.posix.dirname(sourcePaths[boundaryIndex]),
+    directoryPath: dirnamePosix(sourcePaths[boundaryIndex]),
     modulePath: modulePaths[boundaryIndex],
     params,
     sourcePath: sourcePaths[boundaryIndex],
@@ -116,7 +115,7 @@ function resolveNearestBoundaryForPathname(
       return undefined;
     }
 
-    currentDirectoryPath = path.posix.dirname(currentDirectoryPath);
+    currentDirectoryPath = dirnamePosix(currentDirectoryPath);
   }
 }
 
@@ -135,7 +134,7 @@ function createManifestDirectoryMap(manifest: BuildManifest): Map<string, Manife
       ...route.serverErrorBoundaries,
     ]) {
       if (filePath !== undefined) {
-        ensureDirectory(directories, manifest.appDir, path.posix.dirname(filePath));
+        ensureDirectory(directories, manifest.appDir, dirnamePosix(filePath));
       }
     }
 
@@ -147,11 +146,7 @@ function createManifestDirectoryMap(manifest: BuildManifest): Map<string, Manife
         continue;
       }
 
-      ensureDirectory(
-        directories,
-        manifest.appDir,
-        path.posix.dirname(sourcePath),
-      ).browserBoundary = {
+      ensureDirectory(directories, manifest.appDir, dirnamePosix(sourcePath)).browserBoundary = {
         modulePath,
         sourcePath,
       };
@@ -165,11 +160,10 @@ function createManifestDirectoryMap(manifest: BuildManifest): Map<string, Manife
         continue;
       }
 
-      ensureDirectory(directories, manifest.appDir, path.posix.dirname(sourcePath)).serverBoundary =
-        {
-          modulePath,
-          sourcePath,
-        };
+      ensureDirectory(directories, manifest.appDir, dirnamePosix(sourcePath)).serverBoundary = {
+        modulePath,
+        sourcePath,
+      };
     }
   }
 
@@ -189,10 +183,10 @@ function ensureDirectory(
   }
 
   if (normalizedPath !== appDir) {
-    ensureDirectory(directories, appDir, path.posix.dirname(normalizedPath));
+    ensureDirectory(directories, appDir, dirnamePosix(normalizedPath));
   }
 
-  const relativePath = path.posix.relative(appDir, normalizedPath);
+  const relativePath = relativePosixPath(appDir, normalizedPath);
   const directory: ManifestDirectory = {
     path: normalizedPath,
     segments: relativePath === "" ? [] : relativePath.split("/"),
@@ -204,7 +198,29 @@ function ensureDirectory(
 }
 
 function normalizeDirectoryPath(directoryPath: string): string {
-  const normalizedPath = path.posix.normalize(directoryPath);
+  const isAbsolute = directoryPath.startsWith("/");
+  const segments: string[] = [];
+
+  for (const segment of directoryPath.split("/")) {
+    if (segment === "" || segment === ".") {
+      continue;
+    }
+
+    if (segment === "..") {
+      if (segments.length > 0 && segments[segments.length - 1] !== "..") {
+        segments.pop();
+      } else if (!isAbsolute) {
+        segments.push(segment);
+      }
+
+      continue;
+    }
+
+    segments.push(segment);
+  }
+
+  const normalizedPath =
+    `${isAbsolute ? "/" : ""}${segments.join("/")}` || (isAbsolute ? "/" : ".");
 
   return normalizedPath.endsWith("/") && normalizedPath !== "/"
     ? normalizedPath.slice(0, -1)
@@ -217,15 +233,15 @@ function findDeepestMatchingDirectory(
   appDir: string,
 ):
   | {
-      directory: ManifestDirectory;
-      match: DirectoryMatch;
-    }
+    directory: ManifestDirectory;
+    match: DirectoryMatch;
+  }
   | undefined {
   let bestMatch:
     | {
-        directory: ManifestDirectory;
-        match: DirectoryMatch;
-      }
+      directory: ManifestDirectory;
+      match: DirectoryMatch;
+    }
     | undefined;
 
   for (const directory of directories.values()) {
@@ -355,4 +371,53 @@ function splitPathSegments(pathname: string): string[] {
     .split("/")
     .filter((segment) => segment.length > 0)
     .map((segment) => decodeURIComponent(segment));
+}
+
+function dirnamePosix(directoryPath: string): string {
+  const normalizedPath = normalizeDirectoryPath(directoryPath);
+
+  if (normalizedPath === "/") {
+    return "/";
+  }
+
+  const lastSlashIndex = normalizedPath.lastIndexOf("/");
+
+  if (lastSlashIndex < 0) {
+    return ".";
+  }
+
+  if (lastSlashIndex === 0) {
+    return "/";
+  }
+
+  return normalizedPath.slice(0, lastSlashIndex);
+}
+
+function relativePosixPath(fromPath: string, toPath: string): string {
+  const fromSegments = toPathSegments(fromPath);
+  const toSegments = toPathSegments(toPath);
+  let sharedIndex = 0;
+
+  while (
+    sharedIndex < fromSegments.length &&
+    sharedIndex < toSegments.length &&
+    fromSegments[sharedIndex] === toSegments[sharedIndex]
+  ) {
+    sharedIndex += 1;
+  }
+
+  return [
+    ...Array.from({ length: Math.max(0, fromSegments.length - sharedIndex) }, () => ".."),
+    ...toSegments.slice(sharedIndex),
+  ].join("/");
+}
+
+function toPathSegments(directoryPath: string): string[] {
+  const normalizedPath = normalizeDirectoryPath(directoryPath);
+
+  if (normalizedPath === "/" || normalizedPath === ".") {
+    return [];
+  }
+
+  return normalizedPath.replace(/^\//u, "").split("/");
 }

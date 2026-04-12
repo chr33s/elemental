@@ -1,21 +1,19 @@
-import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
+import type { BuildManifest } from "../../build/manifest.ts";
 import {
   resolveNearestBrowserErrorBoundaryForPathname,
   resolveNearestBrowserErrorBoundaryForRoute,
   type ResolvedErrorBoundary,
 } from "../shared/error-boundaries.ts";
 import { renderToString, type HtmlRenderable } from "../shared/html.ts";
-import type { ClientErrorProps, RouteParams } from "../shared/types.ts";
+import type { MatchedManifestRoute } from "../shared/routes.ts";
+import type { ClientErrorProps } from "../shared/types.ts";
 
 interface CompiledBrowserErrorBoundaryModule {
   default?: (props: ClientErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
   head?: (props: ClientErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
 }
 
-export interface MatchedClientRoute {
-  params: RouteParams;
-  route: BuildManifestRoute;
-}
+export type MatchedClientRoute = MatchedManifestRoute;
 
 export interface RenderedClientErrorBoundary {
   boundary: ResolvedErrorBoundary;
@@ -27,7 +25,7 @@ export async function renderClientErrorBoundary(options: {
   error: unknown;
   manifest: BuildManifest;
   matchedRoute?: MatchedClientRoute;
-  resolver: <TModule>(modulePath: string) => Promise<TModule>;
+  resolver: (modulePath: string) => Promise<unknown>;
   status?: number;
   statusText?: string;
   url: URL;
@@ -44,9 +42,9 @@ export async function renderClientErrorBoundary(options: {
     return undefined;
   }
 
-  const boundaryModule = await options.resolver<CompiledBrowserErrorBoundaryModule>(
+  const boundaryModule = (await options.resolver(
     boundary.modulePath,
-  );
+  )) as CompiledBrowserErrorBoundaryModule;
 
   if (typeof boundaryModule.default !== "function") {
     throw new TypeError(
@@ -83,7 +81,7 @@ export async function recoverFromClientError(options: {
   matchedRoute?: MatchedClientRoute;
   renderHead: (head: string) => void;
   renderOutlet: (outlet: string) => void;
-  resolver: <TModule>(modulePath: string) => Promise<TModule>;
+  resolver: (modulePath: string) => Promise<unknown>;
   status?: number;
   statusText?: string;
   url: URL;

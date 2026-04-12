@@ -5,6 +5,7 @@ import {
   recoverFromClientError,
   renderClientErrorBoundary,
 } from "../../src/runtime/client/errors.ts";
+import type { ClientErrorProps } from "../../src/runtime/shared/types.ts";
 
 describe("client error recovery helpers", () => {
   it("renders the nearest matched-route browser boundary and updates head after outlet", async () => {
@@ -39,10 +40,10 @@ describe("client error recovery helpers", () => {
         expect(modulePath).toBe("assets/blog-error.js");
 
         return {
-          default(props) {
+          default(props: ClientErrorProps) {
             return html`<main>${String(props.params.slug)}</main>`;
           },
-          head(props) {
+          head(props: ClientErrorProps) {
             return html`<title>${String(props.params.slug)}</title>`;
           },
         };
@@ -67,7 +68,7 @@ describe("client error recovery helpers", () => {
       error: new Error("failed navigation"),
       manifest,
       resolver: async () => ({
-        default(props) {
+        default(props: ClientErrorProps) {
           return html`<main>${String(props.params.slug)}</main>`;
         },
       }),
