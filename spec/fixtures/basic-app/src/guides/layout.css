@@ -1,0 +1,36 @@
+.guides-shell {
+  display: grid;
+  grid-template-columns: minmax(14rem, 18rem) minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.guides-sidebar {
+  align-self: start;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: #f2f7ff;
+}
+
+.guides-sidebar h2 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.guide-nav {
+  margin: 1rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.guide-nav li + li {
+  margin-top: 0.45rem;
+}
+
+.guides-content {
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .guides-shell {
+    grid-template-columns: 1fr;
+  }
+}

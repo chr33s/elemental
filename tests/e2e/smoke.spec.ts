@@ -7,7 +7,7 @@ type ElementalWindow = Window & {
 test("boots the browser runtime on the initial route", async ({ page }) => {
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Elemental Fixture" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Elemental Example App" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-elemental", "ready");
   await expect(page.locator("fixture-greeting")).toHaveAttribute("data-upgraded", "true");
   await expect(page.locator("fixture-greeting")).toHaveText("Router ready");
@@ -47,8 +47,58 @@ test("navigates client-side while preserving the shell", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/$/u);
   await expect(page).toHaveTitle("Home");
-  await expect(page.getByRole("heading", { name: "Elemental Fixture" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Elemental Example App" })).toBeVisible();
   await expect(page.locator('meta[name="description"]')).toHaveCount(0);
+});
+
+test("navigates into a nested dynamic guide route with loader data", async ({ page }) => {
+  await page.goto("/guides");
+  await page.evaluate(() => {
+    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
+  });
+
+  await page.getByRole("link", { name: "Runtime SSR" }).click();
+
+  await expect(page).toHaveURL(/\/guides\/runtime-ssr$/u);
+  await expect(page).toHaveTitle("Guide: Runtime SSR");
+  await expect(page.locator("#guides-layout-marker")).toHaveText(
+    "This sidebar comes from guides/layout.ts.",
+  );
+  await expect(page.getByRole("heading", { name: "Guide: Runtime SSR" })).toBeVisible();
+  await expect(page.locator("#guide-topic")).toHaveText("runtime-ssr");
+  await expect(page.locator("guide-callout")).toHaveAttribute("data-upgraded", "true");
+  await expect(page.locator("guide-callout")).toHaveText("Dynamic route upgrade");
+  await expect(
+    page.evaluate(
+      () =>
+        document.querySelector("#shell-marker") ===
+        (window as ElementalWindow).__elementalShellMarker,
+    ),
+  ).resolves.toBe(true);
+});
+
+test("enhances post forms that redirect back into the router", async ({ page }) => {
+  await page.goto("/guestbook");
+  await page.evaluate(() => {
+    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
+  });
+
+  await page.getByLabel("Name").fill("Ada");
+  await page.getByLabel("Message").fill("Router flows through Response redirects.");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(page).toHaveURL(/\/guestbook\?/u);
+  await expect(page).toHaveTitle("Guestbook");
+  await expect(page.locator("#guestbook-status")).toHaveText(
+    "Saved a note for Ada: Router flows through Response redirects.",
+  );
+  await expect(
+    page.evaluate(
+      () =>
+        document.querySelector("#shell-marker") ===
+        (window as ElementalWindow).__elementalShellMarker,
+    ),
+  ).resolves.toBe(true);
 });
 
 test("enhances same-origin get forms through the router", async ({ page }) => {

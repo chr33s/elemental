@@ -452,6 +452,7 @@ function createWebRequest(request: IncomingMessage, url: URL): Request {
 
   return new Request(url, {
     body: Readable.toWeb(request) as ReadableStream,
+    duplex: "half",
     headers,
     method,
   } as RequestInit & {

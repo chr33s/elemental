@@ -1,0 +1,217 @@
+:root {
+  color: #1d2433;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  line-height: 1.5;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(255, 233, 185, 0.7), transparent 32%),
+    linear-gradient(180deg, #fffdf7 0%, #eef3ff 100%);
+}
+
+a {
+  color: #1f4b8f;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+.site-shell {
+  margin: 0 auto;
+  max-width: 78rem;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.site-header {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(31, 75, 143, 0.12);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 18px 48px rgba(29, 36, 51, 0.08);
+}
+
+.site-header-copy {
+  margin-bottom: 1rem;
+}
+
+.site-eyebrow,
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: #805321;
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-title {
+  margin: 0;
+  font-size: clamp(1.8rem, 4vw, 2.8rem);
+  line-height: 1.05;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.site-nav a {
+  padding: 0.55rem 0.9rem;
+  border-radius: 999px;
+  background: #edf3ff;
+  color: #1f4b8f;
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.site-nav a:hover {
+  background: #dfeaff;
+}
+
+.shell-marker {
+  margin-top: 1rem;
+  color: #4a5568;
+  font-size: 0.95rem;
+}
+
+.route-frame {
+  padding: 1.5rem;
+  border: 1px solid rgba(31, 75, 143, 0.1);
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 20px 56px rgba(39, 53, 79, 0.08);
+}
+
+.hero,
+.stack,
+.guide-article {
+  max-width: 52rem;
+}
+
+.hero h2,
+.stack h1,
+.guide-article h1,
+.guides-home h1,
+section h1 {
+  margin-bottom: 0.6rem;
+  line-height: 1.1;
+}
+
+.hero p,
+.stack p,
+.guide-article p,
+.guides-home p,
+section p {
+  max-width: 62ch;
+}
+
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.feature-card {
+  padding: 1rem;
+  border: 1px solid rgba(31, 75, 143, 0.1);
+  border-radius: 1rem;
+  background: linear-gradient(180deg, #ffffff 0%, #f7faff 100%);
+}
+
+.feature-card h3 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+}
+
+.feature-card p {
+  margin-top: 0;
+}
+
+.feature-card a {
+  font-weight: 600;
+}
+
+.stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.stack label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.stack input,
+.stack textarea {
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(31, 75, 143, 0.25);
+  border-radius: 0.85rem;
+  background: #ffffff;
+}
+
+.stack textarea {
+  min-height: 7rem;
+  resize: vertical;
+}
+
+.stack button {
+  width: fit-content;
+  padding: 0.7rem 1.1rem;
+  border: 0;
+  border-radius: 999px;
+  background: #1f4b8f;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.notice {
+  padding: 0.85rem 1rem;
+  border-radius: 0.85rem;
+  background: #f8efe1;
+  color: #5b421b;
+}
+
+.guide-points {
+  padding-left: 1.2rem;
+}
+
+guide-callout,
+fixture-badge,
+fixture-greeting {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.6rem;
+  margin: 0.35rem 0 0.85rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: #e9f7f0;
+  color: #156246;
+  font-family: "Menlo", "Monaco", "Courier New", monospace;
+}
+
+@media (max-width: 720px) {
+  .site-shell {
+    padding: 1rem 0.75rem 2rem;
+  }
+
+  .site-header,
+  .route-frame {
+    padding: 1rem;
+    border-radius: 1.1rem;
+  }
+}
