@@ -41,7 +41,7 @@ The built-in example app exercises the framework conventions that are already im
 ## Commands
 
 - `npm run build`: bundle the framework plus the default example app into `dist/`
-- `npm run dev`: rerun the build in watch mode using Node's built-in TypeScript support
+- `npm run build -- --watch`: rerun the build when framework or app source files change using Node's watcher and built-in TypeScript support
 - `npm run start`: start the generated server from `dist/server.js`
 - `npm run test`: run the unit suite and Playwright smoke coverage
 - `npm run test:unit`: run only the Vitest suite
