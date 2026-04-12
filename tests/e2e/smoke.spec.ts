@@ -51,6 +51,25 @@ test("navigates client-side while preserving the shell", async ({ page }) => {
   await expect(page.locator('meta[name="description"]')).toHaveCount(0);
 });
 
+test("does not refetch managed stylesheets on client navigation", async ({ page }) => {
+  const stylesheetRequests: string[] = [];
+
+  page.on("request", (request) => {
+    if (request.resourceType() === "stylesheet") {
+      stylesheetRequests.push(new URL(request.url()).pathname);
+    }
+  });
+
+  await page.goto("/guides");
+  stylesheetRequests.length = 0;
+
+  await page.getByRole("link", { name: "Home" }).click();
+
+  await expect(page).toHaveURL(/\/$/u);
+  await expect(page.getByRole("heading", { name: "Elemental Example App" })).toBeVisible();
+  await expect(stylesheetRequests).toEqual([]);
+});
+
 test("navigates into a nested dynamic guide route with loader data", async ({ page }) => {
   await page.goto("/guides");
   await page.evaluate(() => {

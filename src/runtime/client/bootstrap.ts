@@ -363,39 +363,46 @@ function renderManagedHead(head: string): void {
 
 async function syncManagedStylesheets(stylesheetHrefs: string[]): Promise<void> {
   const normalizedHrefs = [...new Set(stylesheetHrefs.map(normalizeAssetHref))];
+  const desiredHrefs = new Set(normalizedHrefs);
   const existingLinks = new Map(
     [...document.head.querySelectorAll<HTMLLinkElement>(managedStylesheetSelector())].map(
       (link) => [normalizeAssetHref(link.href), link],
     ),
   );
-  const orderedLinks: HTMLLinkElement[] = [];
+  const orderedLinks = normalizedHrefs.map((stylesheetHref) => ({
+    href: stylesheetHref,
+    link: existingLinks.get(stylesheetHref),
+  }));
   const pendingLoads: Promise<void>[] = [];
+  const anchor = document.head.querySelector(managedScriptSelector());
 
-  for (const stylesheetHref of normalizedHrefs) {
-    let link = existingLinks.get(stylesheetHref);
+  for (let index = 0; index < orderedLinks.length; index += 1) {
+    const entry = orderedLinks[index];
 
-    if (link === undefined) {
-      link = document.createElement("link");
+    if (entry?.link === undefined) {
+      const link = document.createElement("link");
+      const referenceNode =
+        orderedLinks
+          .slice(index + 1)
+          .map((candidate) => candidate.link)
+          .find(
+            (candidate): candidate is HTMLLinkElement =>
+              candidate instanceof HTMLLinkElement && candidate.isConnected,
+          ) ?? anchor;
+
       link.rel = "stylesheet";
-      link.href = stylesheetHref;
+      link.href = entry.href;
       link.setAttribute(ELEMENTAL_MANAGED_ATTRIBUTE, ELEMENTAL_MANAGED_STYLESHEET);
-      document.head.append(link);
+      document.head.insertBefore(link, referenceNode);
       pendingLoads.push(waitForStylesheet(link));
+      entry.link = link;
     }
-
-    orderedLinks.push(link);
   }
 
   await Promise.all(pendingLoads);
 
-  const anchor = document.head.querySelector(managedScriptSelector());
-
-  for (const link of orderedLinks) {
-    document.head.insertBefore(link, anchor);
-  }
-
   for (const [href, link] of existingLinks) {
-    if (!normalizedHrefs.includes(href)) {
+    if (!desiredHrefs.has(href)) {
       link.remove();
     }
   }
