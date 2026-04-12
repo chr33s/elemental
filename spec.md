@@ -2,7 +2,7 @@
 
 ## Summary
 
-Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `client.ts` as both the route template module and client component module, route server modules for data loading and mutations, native custom element upgrade on the client, and explicit custom element registration conventions.
+Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules for data loading and mutations, native custom element upgrade on the client, and explicit custom element registration conventions.
 
 v0 intentionally focuses on a single rendering model: runtime SSR. There is no mode flag in v0.
 
@@ -15,8 +15,9 @@ v0 intentionally focuses on a single rendering model: runtime SSR. There is no m
 - Support filesystem routing with dynamic segments.
 - Support nested layouts.
 - Support route-level data loading and mutations.
-- Use `client.ts` as the default route body template module.
+- Use `index.ts` as the default route render module.
 - Support standard JavaScript template literal rendering for route templates.
+- Escape interpolated values by default unless explicitly marked safe.
 - Support client-side navigation and route transitions.
 - Support native custom element upgrade in the browser.
 - Keep component authoring explicit and low-magic.
@@ -51,19 +52,19 @@ src/
   layout.ts
   layout.css
 
+  index.ts
   server.ts
-  client.ts
   home.css
 
   about/
+    index.ts
     server.ts
-    client.ts
     about.css
 
   blog/
     [slug]/
+      index.ts
       server.ts
-      client.ts
       post.css
 ```
 
@@ -72,24 +73,32 @@ src/
 - `layout.html`: HTML shell template for a directory layout.
 - `layout.ts`: client runtime/setup for a directory layout.
 - `layout.css`: global stylesheet for a directory layout.
+- `index.ts`: route render module and client component module.
 - `server.ts`: route server module.
-- `client.ts`: route template and client component module.
 - any other `*.css`: scoped CSS module.
 
 Any directory may define its own `layout.html`, `layout.ts`, and `layout.css`, allowing nested layouts.
 
 ---
 
+## Route definition
+
+A route is defined by a directory containing `index.ts`.
+
+Examples:
+
+- `src/index.ts` -> `/`
+- `src/about/index.ts` -> `/about`
+- `src/blog/[slug]/index.ts` -> `/blog/:slug`
+- `src/docs/[...parts]/index.ts` -> `/docs/*`
+
+`server.ts` is optional.
+
+---
+
 ## Routing
 
 Elemental uses filesystem routing.
-
-### Route mapping examples
-
-- `src/client.ts` -> `/`
-- `src/about/client.ts` -> `/about`
-- `src/blog/[slug]/client.ts` -> `/blog/:slug`
-- `src/docs/[...parts]/client.ts` -> `/docs/*`
 
 ### Dynamic segments
 
@@ -130,8 +139,8 @@ src/
     layout.css
 
     settings/
+      index.ts
       server.ts
-      client.ts
       settings.css
 ```
 
@@ -139,9 +148,18 @@ A request to `/dashboard/settings` uses:
 
 1. the root layout,
 2. the dashboard layout,
-3. the settings route body from `client.ts`.
+3. the settings route body from `index.ts`.
 
 Nested layouts compose their body outlet via the same marker used by the root shell.
+
+### Asset composition
+
+For a matched route, Elemental includes all ancestor layout assets in root-to-leaf order, followed by the route’s own assets.
+
+This applies to:
+
+- `layout.css`
+- `layout.ts`
 
 ---
 
@@ -176,34 +194,62 @@ The framework injects CSS, rendered body content, and client scripts through the
 
 ## Route rendering model
 
-`client.ts` is the default route body template module.
+`index.ts` is the default route render module.
 
 A route is rendered by:
 
 1. matching the request URL to a route,
 2. gathering parent layouts,
 3. loading route data through `server.ts` if present,
-4. executing the default export from `client.ts`,
+4. executing the default export from `index.ts`,
 5. composing nested layouts,
 6. injecting CSS and scripts,
 7. streaming the final document response.
 
-This makes `client.ts` the primary source of route markup, while `server.ts` supplies logic and control.
+This makes `index.ts` the primary source of route markup, while `server.ts` supplies logic and control.
 
 ---
 
-## `client.ts`
+## Route render props
 
-Each route defines its default body renderer in `client.ts`.
+When Elemental executes the default export from `index.ts`, it provides:
+
+```ts
+type RouteRenderProps = {
+  params: Record<string, string | string[]>;
+  data: Record<string, unknown>;
+  url: URL;
+};
+```
+
+Where:
+
+- `params` comes from route matching,
+- `data` comes from `loader(ctx)` or a non-`Response` default export from `server.ts`,
+- `url` is the request URL.
+
+If neither `loader()` nor a non-`Response` default export exists, `data` is an empty object.
+
+---
+
+## `index.ts`
+
+Each route defines its default body renderer in `index.ts`.
+
+### Isomorphic requirement
+
+`index.ts` must be safe to import in both server and browser environments.
+
+Top-level code should avoid direct access to browser-only globals unless guarded.
 
 ### Default export contract
 
-`client.ts` exports a default function that returns an HTML string.
+`index.ts` exports a default function that returns an HTML string.
 
 Example:
 
 ```ts
-export default function component(props) {
+export default function component(props: RouteRenderProps) {
   return `
     <el-blog-post slug="${props.params.slug}"></el-blog-post>
     <el-blog-sidebar></el-blog-sidebar>
@@ -218,7 +264,7 @@ The default export uses standard JavaScript and template literals.
 This allows normal JavaScript expressions, such as:
 
 ```ts
-export default function component(props) {
+export default function component(props: RouteRenderProps) {
   return `
     <ul>
       ${props.data.values.map((value) => `<li>${value}</li>`).join('')}
@@ -229,16 +275,24 @@ export default function component(props) {
 
 This avoids inventing a custom HTML DSL and keeps advanced rendering in plain JavaScript.
 
+### Escaping
+
+Interpolated values are HTML-escaped by default in v0 unless explicitly marked safe.
+
+For example, plain string interpolation is escaped before insertion into the final HTML output.
+
+Elemental should provide an explicit safe-marking mechanism for trusted HTML, such as a helper like `safeHtml(...)`.
+
 ### Named exports for client components
 
-`client.ts` may also define named exports for custom element classes.
+`index.ts` may also define named exports for custom element classes.
 
 Any named export that:
 
 - is a subclass of `HTMLElement`, and
 - defines a valid `static tagName`
 
-is automatically registered by Elemental on the client.
+is automatically registered by Elemental in the browser runtime.
 
 Elemental does not infer tag names from class names or export names.
 
@@ -251,7 +305,6 @@ static tagName = 'el-example-component';
 ```
 
 The tag name must:
-
 - be a string,
 - contain a hyphen,
 - be unique within the custom element registry.
@@ -261,7 +314,7 @@ The tag name must:
 ```ts
 import sheet from './post.css';
 
-export default function component(props) {
+export default function component(props: RouteRenderProps) {
   return `
     <el-blog-post slug="${props.params.slug}"></el-blog-post>
     <el-blog-sidebar></el-blog-sidebar>
@@ -293,9 +346,11 @@ export class BlogSidebar extends HTMLElement {
 
 ### Auto-registration rule
 
-Elemental imports all named exports from `client.ts` and automatically registers every export that matches the component contract.
+Elemental imports all named exports from `index.ts` and automatically registers every export that matches the component contract in the browser runtime.
 
-This removes the need for manual `customElements.define(...)` calls in route client modules.
+This removes the need for manual `customElements.define(...)` calls in route modules.
+
+Server-side imports of `index.ts` must not attempt to access `customElements`.
 
 ---
 
@@ -312,11 +367,11 @@ A route server module may export:
 
 ### Optional default export
 
-A route server module may optionally export a default handler that returns a `Response`.
+A route server module may optionally export a default handler.
 
-If present, the default export is an escape hatch for full response control.
+If the default handler returns a `Response`, it fully owns the route response.
 
-If absent, Elemental renders the default export from `client.ts` automatically.
+If the default handler does not return a `Response`, Elemental uses that return value as route data input to the normal `index.ts` render pipeline.
 
 ### Example: default path
 
@@ -328,9 +383,9 @@ export async function loader(ctx) {
 }
 ```
 
-In this case, Elemental executes the default export from `client.ts` using the loader result.
+In this case, Elemental executes the default export from `index.ts` using the loader result.
 
-### Example: escape hatch
+### Example: full response ownership
 
 ```ts
 export default async function Component(ctx) {
@@ -338,72 +393,19 @@ export default async function Component(ctx) {
 }
 ```
 
-In this case, the route bypasses default `client.ts` rendering and returns the custom response directly.
+In this case, the route bypasses normal `index.ts` rendering and returns the custom response directly.
 
----
-
-## Default route rendering contract
-
-If a route does not export a default server handler, Elemental renders the default export from `client.ts` into a `Response` automatically.
-
-That default render pipeline is:
-
-1. run `loader(ctx)` if present,
-2. collect `params` and loader `data`,
-3. execute the default export from `client.ts`,
-4. compose layouts,
-5. produce the final `Response`.
-
-This allows most routes to avoid manual response construction.
-
----
-
-## Route context
-
-Recommended route context shape:
+### Example: non-Response override data
 
 ```ts
-type RouteContext = {
-  request: Request;
-  url: URL;
-  params: Record<string, string | string[]>;
-  assets: {
-    js: string[];
-    css: string[];
+export default async function Component(ctx) {
+  return {
+    title: 'Hello World'
   };
-};
-```
-
-This shape may evolve, but `request`, `url`, and `params` are core to the v0 contract.
-
----
-
-## Template props model
-
-When executing the default export from `client.ts`, Elemental provides a props object containing:
-
-- `params`
-- `data`
-
-Example:
-
-```ts
-export default function component(props) {
-  return `
-    <el-blog-post
-      slug="${props.params.slug}"
-      title="${props.data.title}">
-    </el-blog-post>
-  `;
 }
 ```
 
-Where:
-
-- `params` comes from route matching,
-- `data` comes from `loader(ctx)`.
-
-If no `loader()` exists, `data` is an empty object.
+In this case, Elemental continues through the normal `index.ts` render pipeline using the returned value.
 
 ---
 
@@ -414,7 +416,7 @@ If no `loader()` exists, `data` is an empty object.
 - Runs for route data loading.
 - Used during initial document requests.
 - Used during client-side navigations for GET requests.
-- Provides data for the default export in `client.ts`.
+- Provides data for the default export in `index.ts`.
 
 Example:
 
@@ -461,13 +463,12 @@ Styling rules in v0 are:
 Layout-level CSS files apply globally for their layout scope.
 
 Examples:
-
 - `src/layout.css`
 - `src/dashboard/layout.css`
 
 ### Scoped CSS
 
-Route/component CSS files are scoped modules and are intended to be imported by component modules.
+Non-layout `*.css` files compile to `CSSStyleSheet` instances for use with `adoptedStyleSheets`.
 
 Example:
 
@@ -495,11 +496,11 @@ A request flows through the framework as follows:
 1. match the request URL to a route,
 2. gather parent layouts,
 3. run `loader()` if present,
-4. execute the default export from `client.ts` unless a custom default response handler overrides it,
+4. execute the default export from `index.ts` unless a `Response` returned from `server.ts` overrides it,
 5. compose nested layouts,
 6. inject CSS and scripts into shell markers,
 7. stream the final document,
-8. load client modules in the browser,
+8. load route and layout modules in the browser,
 9. auto-register exported custom elements,
 10. upgrade custom elements natively.
 
@@ -518,8 +519,8 @@ The client router is responsible for:
 - intercepting same-origin navigations,
 - using the Navigation API when available,
 - falling back as needed,
-- loading the next route document/data,
-- swapping the current route outlet,
+- fetching the next full document response,
+- extracting and swapping the current route outlet,
 - loading route client modules,
 - preserving history and redirects.
 
@@ -565,8 +566,9 @@ Possible manifest contents include route metadata and asset mappings.
 - Web Components first.
 - Explicit contracts over inference.
 - Runtime SSR as the single v0 model.
-- Unified route template and component module through `client.ts`.
+- Unified route render and component module through `index.ts`.
 - Standard JavaScript template literal rendering instead of a custom HTML DSL.
+- Escaped-by-default template interpolation.
 - Native browser upgrade over virtual DOM hydration.
 - Scoped styling by default.
 - Convention first, with `server.ts` default export as an escape hatch.
@@ -575,12 +577,12 @@ Possible manifest contents include route metadata and asset mappings.
 
 ## Example route
 
-### `src/blog/[slug]/client.ts`
+### `src/blog/[slug]/index.ts`
 
 ```ts
 import sheet from './post.css';
 
-export default function component(props) {
+export default function component(props: RouteRenderProps) {
   return `
     <el-blog-post slug="${props.params.slug}"></el-blog-post>
     <el-blog-sidebar></el-blog-sidebar>
@@ -628,10 +630,11 @@ export async function loader({ params }) {
 
 Elemental v0 is a runtime-SSR framework for Web Components where:
 
-- routes are defined primarily by the default export in `client.ts`,
-- route logic lives in `server.ts`,
+- routes are defined by directories containing `index.ts`,
+- route rendering is defined primarily by the default export in `index.ts`,
+- route logic lives in optional `server.ts`,
 - layouts are defined by `layout.html`, `layout.ts`, and `layout.css`,
 - routing is filesystem-based,
 - component tag names are explicit via `static tagName`,
-- client registration is automatic, and
+- client registration is automatic in the browser runtime, and
 - client enhancement happens through native custom element upgrade.
