@@ -288,7 +288,7 @@ async function applyNavigationPayload(
   const finalRoute = matchManifestRoute(finalUrl.pathname, state.manifest.routes);
 
   try {
-    await syncManagedStylesheets(payload.assets.stylesheets);
+    const removeObsoleteStylesheets = await syncManagedStylesheets(payload.assets.stylesheets);
     await loadScriptModules(state, payload.assets.scripts);
 
     await performViewTransition(async () => {
@@ -296,6 +296,7 @@ async function applyNavigationPayload(
       renderManagedHead(payload.head);
     });
 
+    removeObsoleteStylesheets();
     applyHistory(finalUrl, history);
     state.currentRoute = finalRoute ?? matchedRoute;
   } catch (error) {
@@ -361,7 +362,7 @@ function renderManagedHead(head: string): void {
   end.before(range.createContextualFragment(head));
 }
 
-async function syncManagedStylesheets(stylesheetHrefs: string[]): Promise<void> {
+async function syncManagedStylesheets(stylesheetHrefs: string[]): Promise<() => void> {
   const normalizedHrefs = [...new Set(stylesheetHrefs.map(normalizeAssetHref))];
   const desiredHrefs = new Set(normalizedHrefs);
   const existingLinks = new Map(
@@ -401,11 +402,17 @@ async function syncManagedStylesheets(stylesheetHrefs: string[]): Promise<void> 
 
   await Promise.all(pendingLoads);
 
-  for (const [href, link] of existingLinks) {
-    if (!desiredHrefs.has(href)) {
-      link.remove();
+  const obsoleteLinks = [...existingLinks].flatMap(([href, link]) =>
+    desiredHrefs.has(href) ? [] : [link],
+  );
+
+  return () => {
+    for (const link of obsoleteLinks) {
+      if (link.isConnected) {
+        link.remove();
+      }
     }
-  }
+  };
 }
 
 async function waitForStylesheet(link: HTMLLinkElement): Promise<void> {

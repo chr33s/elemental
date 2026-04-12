@@ -2,6 +2,11 @@ import { expect, test } from "@playwright/test";
 
 type ElementalWindow = Window & {
   __elementalShellMarker?: Element | null;
+  __elementalTransitionProbe?: {
+    afterCallbackStyles?: string[];
+    beforeCallbackStyles?: string[];
+    release?: () => void;
+  };
 };
 
 test("boots the browser runtime on the initial route", async ({ page }) => {
@@ -67,7 +72,92 @@ test("does not refetch managed stylesheets on client navigation", async ({ page 
 
   await expect(page).toHaveURL(/\/$/u);
   await expect(page.getByRole("heading", { name: "Elemental Example App" })).toBeVisible();
-  await expect(stylesheetRequests).toEqual([]);
+  expect(stylesheetRequests).toEqual([]);
+});
+
+test("keeps outgoing guides styles attached until the view transition swaps routes", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const currentStyles = () =>
+      [...document.head.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]')].map(
+        (link) => new URL(link.href).pathname,
+      );
+    const probe: NonNullable<ElementalWindow["__elementalTransitionProbe"]> = ((
+      window as ElementalWindow
+    ).__elementalTransitionProbe = {});
+
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      value: ((callback: () => Promise<void> | void) => {
+        let releaseTransition: (() => void) | undefined;
+        let callbackResult: Promise<void> | void;
+
+        probe.beforeCallbackStyles = currentStyles();
+
+        try {
+          callbackResult = callback();
+        } catch (error) {
+          callbackResult = Promise.reject(error);
+        }
+
+        const updateCallbackDone = Promise.resolve(callbackResult)
+          .then(() => {
+            probe.afterCallbackStyles = currentStyles();
+          })
+          .catch(() => {});
+
+        probe.release = () => {
+          releaseTransition?.();
+        };
+
+        return {
+          finished: new Promise<void>((resolve) => {
+            releaseTransition = resolve;
+          }),
+          ready: Promise.resolve(undefined),
+          skipTransition: () => {
+            releaseTransition?.();
+          },
+          types: new Set<string>(),
+          updateCallbackDone,
+        } as ViewTransition;
+      }) as unknown as Document["startViewTransition"],
+    });
+  });
+
+  await page.goto("/guides");
+  await page.getByRole("link", { name: "About" }).click();
+
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        ((window as ElementalWindow).__elementalTransitionProbe?.beforeCallbackStyles ?? []).some(
+          (href) => /\/assets\/guides-layout-.*\.css$/u.test(href),
+        ),
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        ((window as ElementalWindow).__elementalTransitionProbe?.afterCallbackStyles ?? []).some(
+          (href) => /\/assets\/guides-layout-.*\.css$/u.test(href),
+        ),
+      ),
+    )
+    .toBe(true);
+
+  await page.evaluate(() => {
+    (window as ElementalWindow).__elementalTransitionProbe?.release?.();
+  });
+
+  await expect(page).toHaveURL(/\/about$/u);
+  await expect(page.getByRole("heading", { name: "About Elemental" })).toBeVisible();
+  await expect(page.locator('link[rel="stylesheet"]')).not.toHaveAttribute(
+    "href",
+    /\/assets\/guides-layout-.*\.css$/u,
+  );
 });
 
 test("navigates into a nested dynamic guide route with loader data", async ({ page }) => {
