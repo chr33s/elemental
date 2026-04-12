@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
-import { renderToString } from "../shared/html.ts";
 import type { RouteRenderer } from "../shared/types.ts";
 import { renderDocument } from "./render-document.ts";
 
@@ -54,7 +53,7 @@ async function handleRequest(
     response.setHeader("content-type", "text/html; charset=utf-8");
     response.end(
       renderDocument({
-        body: renderToString(body),
+        body,
         clientAssetHref: options.clientAssetHref,
       }),
     );
