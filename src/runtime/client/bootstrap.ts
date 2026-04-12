@@ -536,18 +536,49 @@ function applyHistory(url: URL, historyMode: NavigationHistoryMode): void {
 
 function fallbackToDocumentNavigation(url: URL, replace: boolean): void {
   window.setTimeout(() => {
-    if (window.location.href === url.href) {
-      window.location.reload();
+    if (getNavigationApi() !== undefined) {
+      void replaceDocumentFromUrl(url, replace).catch(() => {
+        performDocumentNavigation(url, replace);
+      });
+
       return;
     }
 
-    if (replace) {
-      window.location.replace(url.href);
-      return;
-    }
-
-    window.location.assign(url.href);
+    performDocumentNavigation(url, replace);
   }, 0);
+}
+
+async function replaceDocumentFromUrl(url: URL, replace: boolean): Promise<void> {
+  const response = await fetch(url, {
+    headers: {
+      accept: "text/html,application/xhtml+xml",
+    },
+  });
+  const finalUrl = new URL(response.url || url.href);
+  const nextUrl = `${finalUrl.pathname}${finalUrl.search}${finalUrl.hash}`;
+
+  if (
+    replace ||
+    `${window.location.pathname}${window.location.search}${window.location.hash}` !== nextUrl
+  ) {
+    window.history.replaceState(null, "", nextUrl);
+  }
+
+  await replaceEntireDocument(response);
+}
+
+function performDocumentNavigation(url: URL, replace: boolean): void {
+  if (window.location.href === url.href) {
+    window.location.reload();
+    return;
+  }
+
+  if (replace) {
+    window.location.replace(url.href);
+    return;
+  }
+
+  window.location.assign(url.href);
 }
 
 function shouldInterceptLinkNavigation(

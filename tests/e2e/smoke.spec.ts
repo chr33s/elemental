@@ -252,6 +252,19 @@ test("recovers client-side navigation through the nearest browser boundary", asy
   ).resolves.toBe(true);
 });
 
+test("escapes intercepted reload fallbacks with a document navigation", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Reload" }).click();
+
+  await expect(page).toHaveURL(/\/reload$/u);
+  await expect(page.getByRole("heading", { name: "Reload Route" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Home" }).click();
+
+  await expect(page).toHaveURL(/\/$/u);
+  await expect(page.getByRole("heading", { name: "Elemental Example App" })).toBeVisible();
+});
+
 test("falls back to a full reload when no browser boundary exists", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "navigation", {
