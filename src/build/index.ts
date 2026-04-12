@@ -73,7 +73,7 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     write: true,
   });
 
-  const browserOutputs = collectEntryOutputs(clientBuild.metafile?.outputs ?? {}, outDir);
+  const browserOutputs = collectEntryOutputs(clientBuild.metafile?.outputs ?? {}, outDir, rootDir);
   const clientAssetRelativePath = requireEntryOutput(
     browserOutputs,
     clientBootstrapPath,
@@ -101,7 +101,11 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     target: ["node24"],
     write: true,
   });
-  const serverOutputs = collectEntryOutputs(serverModuleBuild.metafile?.outputs ?? {}, outDir);
+  const serverOutputs = collectEntryOutputs(
+    serverModuleBuild.metafile?.outputs ?? {},
+    outDir,
+    rootDir,
+  );
 
   const manifest: BuildManifest = {
     appDir: toPosixPath(path.relative(rootDir, appDir)),
@@ -255,9 +259,6 @@ async function buildPackageEntrypoints(
   });
 
   await esbuild({
-    banner: {
-      js: "#!/usr/bin/env node",
-    },
     bundle: true,
     entryPoints: [cliEntryPath],
     format: "esm",
@@ -342,6 +343,7 @@ function slugifyFileStem(filePath: string): string {
 function collectEntryOutputs(
   outputs: Record<string, { entryPoint?: string }>,
   outDir: string,
+  workingDir: string,
 ): Map<string, string> {
   const entryOutputs = new Map<string, string>();
 
@@ -351,7 +353,7 @@ function collectEntryOutputs(
     }
 
     entryOutputs.set(
-      path.resolve(outputInfo.entryPoint),
+      path.resolve(workingDir, outputInfo.entryPoint),
       toPosixPath(path.relative(outDir, path.resolve(outputPath))),
     );
   }

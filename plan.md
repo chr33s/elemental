@@ -270,8 +270,8 @@ Tasks:
 - Match incoming URLs using the generated route graph.
 - Create `RouteServerContext` with `request`, `params`, and `url`.
 - For non-GET mutations, route to `action()` when present.
-- If `action()` returns a `Response`, return it directly and skip rendering.
-- Treat the non-`Response` `action()` path as a spec-clarification checkpoint and avoid hard-coding post-mutation re-render semantics until the contract is explicitly locked.
+- Require `action()` to return a `Response` in v0.
+- Treat non-`Response` `action()` returns as contract errors and route them through the standard 500 error handling path.
 - If `index.server.ts` has a default export, execute it first and return the `Response` directly.
 - Otherwise execute `loader()` when present.
 - If `loader()` returns a `Response`, bypass layout composition and return it directly. This is a distinct short-circuit path from the `index.server.ts` default-export escape hatch and must be handled separately.
@@ -287,8 +287,8 @@ Acceptance criteria:
 - Full document requests return SSR HTML with the correct layout nesting.
 - Router payload requests return outlet, head, status, and asset metadata without a full shell.
 - `loader()` and `action()` receive the documented context.
+- `action()` returns are `Response`-only in v0.
 - `loader()` returning a `Response` bypasses layout composition and returns it directly.
-- The post-mutation behavior for non-`Response` `action()` returns is explicitly documented before implementation is finalized.
 - Explicit `Response` returns from `index.server.ts` default exports bypass rendering exactly as specified.
 - Route `head()` output is composed into `LayoutProps.head` and rendered in the document `<head>`.
 
@@ -390,7 +390,7 @@ Integration tests:
 - Full document rendering with nested layouts.
 - Dynamic route params and catch-all params.
 - `loader()` data flow into `index.ts`.
-- `action()` behavior for mutations, including the finalized non-`Response` contract once it is locked.
+- `action()` behavior for mutations, including the v0 `Response`-only contract.
 - `index.server.ts` default export bypass behavior.
 - `loader()` returning a `Response` bypasses layout composition.
 - `action()` returning a `Response` bypasses layout composition.
@@ -437,6 +437,30 @@ Acceptance criteria:
 - A new user can create a small app from the README without reading the full spec first.
 - The example app exercises the major framework features.
 - Release readiness can be evaluated with a single checklist.
+
+## Phase 11: Gaps
+
+Deliverables:
+
+- Correct package entrypoints for the published library and CLI.
+- A resolved contract for non-`Response` `action()` returns, or an explicit scope reduction that removes that path from v0.
+- Release-readiness verification that exercises the package through its public entrypoints instead of only internal source paths.
+
+Tasks:
+
+- Fix the package export map so the `import` entry points at emitted JavaScript instead of a non-existent TypeScript artifact.
+- Fix the package `bin` entry so `npx elemental` resolves to the real CLI entrypoint.
+- Add a verification step that confirms `import "elemental"` works after build output is generated.
+- Add a verification step that confirms the declared CLI entrypoint can execute a build command.
+- Finalize the v0 `action()` contract as `Response`-only and keep runtime, README, plan, and spec language aligned.
+- Update tests or release checks so unresolved package metadata or CLI wiring regressions fail before release.
+
+Acceptance criteria:
+
+- `import "elemental"` resolves through the package export map after a build without referencing missing files.
+- `npx elemental build` resolves through the package `bin` entry and executes successfully.
+- The release checklist no longer contains open-ended completion blockers for v0.
+- The plan, runtime behavior, README, and spec agree on the v0 `Response`-only `action()` contract.
 
 ## Cross-Cutting Rules
 

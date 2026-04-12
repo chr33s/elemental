@@ -52,12 +52,18 @@ describe("client bootstrap helpers", () => {
       static tagName = "new-card";
     }
 
-    const definitions = new Map<string, unknown>([["existing-card", ExistingCard]]);
+    const definitions = new Map<string, CustomElementConstructor>([
+      ["existing-card", ExistingCard as unknown as CustomElementConstructor],
+    ]);
     const registry = {
-      define: vi.fn<(tagName: string, constructor: unknown) => void>((tagName, constructor) => {
-        definitions.set(tagName, constructor);
-      }),
-      get: vi.fn<(tagName: string) => unknown>((tagName) => definitions.get(tagName)),
+      define: vi.fn<(tagName: string, constructor: CustomElementConstructor) => void>(
+        (tagName, constructor) => {
+          definitions.set(tagName, constructor);
+        },
+      ),
+      get: vi.fn<(tagName: string) => CustomElementConstructor | undefined>((tagName) =>
+        definitions.get(tagName),
+      ),
     };
 
     registerCustomElementDefinitions(

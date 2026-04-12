@@ -729,7 +729,9 @@ export async function loader({ params }: RouteServerContext) {
 
 - Handles form submissions and mutations.
 - Intended for POST/PUT/PATCH/DELETE-style operations.
-- May return redirects, document responses, or mutation results.
+- Must return a `Response` in v0.
+- May return redirects or document responses.
+- Non-`Response` mutation result objects are out of scope for v0.
 
 Example:
 

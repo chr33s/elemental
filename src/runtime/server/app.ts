@@ -195,10 +195,7 @@ async function renderMatchedRoute(options: {
       return actionResult;
     }
 
-    return textResponse(
-      "Action handlers must return a Response until non-Response mutation semantics are specified.",
-      501,
-    );
+    throw new TypeError(`Action handler for ${route.pattern} must return a Response in v0.`);
   }
 
   const loaderResult =

@@ -1,6 +1,8 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DiscoveredRoute } from "../../src/build/discover.ts";
 import { discoverRoutes } from "../../src/build/discover.ts";
@@ -9,6 +11,7 @@ import type { BuildManifest } from "../../src/build/manifest.ts";
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 const temporaryPaths = new Set<string>();
+const execFileAsync = promisify(execFile);
 
 afterEach(async () => {
   await Promise.all(
@@ -617,6 +620,66 @@ export const secret = "hidden";
         rootDir,
       }),
     ).rejects.toThrow(/must not import server-only module/u);
+  });
+
+  it("verifies package import and CLI entrypoints through built artifacts", async () => {
+    const packageDir = await mkdtemp(path.join(rootDir, ".tmp-phase11-package-"));
+
+    temporaryPaths.add(packageDir);
+
+    await Promise.all([
+      cp(
+        path.join(rootDir, "spec", "fixtures", "basic-app"),
+        path.join(packageDir, "spec", "fixtures", "basic-app"),
+        {
+          recursive: true,
+        },
+      ),
+      cp(path.join(rootDir, "src"), path.join(packageDir, "src"), {
+        recursive: true,
+      }),
+      writeFile(
+        path.join(packageDir, "package.json"),
+        await readFile(path.join(rootDir, "package.json"), "utf8"),
+        "utf8",
+      ),
+    ]);
+
+    const packageJson = JSON.parse(
+      await readFile(path.join(packageDir, "package.json"), "utf8"),
+    ) as {
+      bin: { elemental: string };
+      exports: { ".": { import: string } };
+    };
+
+    expect(packageJson.bin.elemental).toBe("./dist/cli.js");
+    expect(packageJson.exports["."].import).toBe("./dist/index.js");
+
+    await buildProject({
+      rootDir: packageDir,
+    });
+
+    const importResult = await execFileAsync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        "const pkg = await import('elemental'); if (typeof pkg.html !== 'function' || typeof pkg.safeHtml !== 'function') throw new Error('missing exports'); console.log('ok');",
+      ],
+      {
+        cwd: packageDir,
+      },
+    );
+    const cliResult = await execFileAsync(
+      process.execPath,
+      [path.join(packageDir, packageJson.bin.elemental), "build"],
+      {
+        cwd: packageDir,
+      },
+    );
+
+    expect(importResult.stdout.trim()).toBe("ok");
+    expect(cliResult.stdout).toContain("Built ");
   });
 });
 

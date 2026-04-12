@@ -151,6 +151,56 @@ export default function post() {
     expect(consoleError).toHaveBeenCalled();
   });
 
+  it("routes invalid non-Response action returns through the nearest server boundary", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { manifest, outDir } = await buildTempApp({
+      "error.server.ts": `import { html, type ErrorProps } from "elemental";
+
+export default function rootError(props: ErrorProps) {
+  const message = props.error instanceof Error ? props.error.message : String(props.error);
+  return html\`<main>action contract: ${"${message}"}</main>\`;
+}
+`,
+      [path.join("submit", "index.server.ts")]: `export async function action() {
+  return {
+    ok: true,
+  };
+}
+`,
+      [path.join("submit", "index.ts")]: `import { html } from "elemental";
+
+export default function submit() {
+  return html\`<main>never</main>\`;
+}
+`,
+    });
+
+    const response = await handleElementalRequest(
+      new Request("http://example.com/submit", {
+        body: new URLSearchParams({
+          title: "Draft",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        method: "POST",
+      }),
+      {
+        distDir: outDir,
+        manifest,
+      },
+    );
+    const body = await response.text();
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("content-type")).toContain("text/html");
+    expect(body).toContain(
+      "<main>action contract: Action handler for /submit must return a Response in v0.</main>",
+    );
+    expect(body).not.toContain("<main>never</main>");
+    expect(consoleError).toHaveBeenCalled();
+  });
+
   it("returns structured router payloads for server-rendered errors", async () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
 

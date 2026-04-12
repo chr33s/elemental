@@ -281,13 +281,15 @@ export default function docsRoute(props: RouteProps) {
     expect(body).toContain("<title>Post alpha</title>");
     expect(body).toContain('<meta name="description" content="Story alpha" />');
 
-    for (const stylesheetHref of route.assets.layoutCss.map((assetPath) => `/${assetPath}`)) {
+    for (const stylesheetHref of (route.assets.layoutCss ?? []).map(
+      (assetPath) => `/${assetPath}`,
+    )) {
       expect(body).toContain(`href="${stylesheetHref}"`);
     }
 
     expect(body).toContain(`src="/${manifest.assets.clientEntry}"`);
 
-    for (const scriptHref of route.assets.scripts.map((assetPath) => `/${assetPath}`)) {
+    for (const scriptHref of (route.assets.scripts ?? []).map((assetPath) => `/${assetPath}`)) {
       expect(body).toContain(`src="${scriptHref}"`);
     }
   });
@@ -318,11 +320,11 @@ export default function docsRoute(props: RouteProps) {
     expect(payload.outlet).not.toContain("<html");
     expect(payload.outlet).not.toContain("data-route-outlet");
     expect(payload.assets.stylesheets).toEqual(
-      route.assets.layoutCss.map((assetPath) => `/${assetPath}`),
+      (route.assets.layoutCss ?? []).map((assetPath) => `/${assetPath}`),
     );
     expect(payload.assets.scripts).toEqual([
       `/${manifest.assets.clientEntry}`,
-      ...route.assets.scripts.map((assetPath) => `/${assetPath}`),
+      ...(route.assets.scripts ?? []).map((assetPath) => `/${assetPath}`),
     ]);
   });
 
@@ -398,7 +400,7 @@ export default function docsRoute(props: RouteProps) {
     expect(await response.text()).toBe("saved:Draft");
   });
 
-  it("holds the non-Response action path at the spec checkpoint", async () => {
+  it("treats non-Response action returns as server errors", async () => {
     const response = await handleElementalRequest(
       new Request("http://example.com/checkpoint", {
         body: new URLSearchParams({
@@ -415,8 +417,8 @@ export default function docsRoute(props: RouteProps) {
       },
     );
 
-    expect(response.status).toBe(501);
-    expect(await response.text()).toContain("Action handlers must return a Response");
+    expect(response.status).toBe(500);
+    expect(await response.text()).toBe("500 Internal Server Error");
   });
 });
 

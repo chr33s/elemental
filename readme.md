@@ -116,7 +116,7 @@ export async function loader(context: RouteServerContext) {
 
 ### Action Example
 
-`action()` is intentionally held to a `Response`-only contract right now. The safest pattern is to return a redirect after a successful mutation.
+`action()` is `Response`-only in v0. Return a redirect, error response, or full document response after the mutation completes.
 
 ```ts
 import type { RouteServerContext } from "elemental";
@@ -200,11 +200,12 @@ Use this checklist as the phase-level release gate for v0:
 - [x] Named `HTMLElement` exports auto-register in the browser runtime when `static tagName` is valid.
 - [x] Nearest-ancestor `error.server.ts` and `error.ts` resolution is covered by tests.
 - [x] The built-in example app demonstrates nested layouts, dynamic params, route data, form actions, client navigation, and browser recovery.
-- [ ] Finalize non-`Response` `action()` semantics. The runtime still returns `501` on that path by design.
+- [x] `action()` is `Response`-only in v0; non-`Response` returns fail through standard 500 error handling.
 
 ## Current Scope Notes
 
 - The default CLI flow builds `spec/fixtures/basic-app/src` today.
 - The project is ESM-only.
+- `action()` must return a `Response` in v0.
 - Browser-reachable modules cannot import `*.server.ts` files.
 - `error.ts` is browser-only and is excluded from the server bundle.
