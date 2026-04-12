@@ -2,7 +2,7 @@
 
 ## Summary
 
-Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules via `server.ts`, and `layout.ts` as the layout render module and layout client component module.
+Elemental v0 is a runtime-SSR meta-framework for native Web Components. It uses filesystem routing, nested layouts, `index.ts` as both the route render module and client component module, route server modules via `index.server.ts`, and `layout.ts` as the layout render module and layout client component module.
 
 v0 intentionally focuses on a single rendering model: runtime SSR. There is no mode flag in v0.
 
@@ -53,18 +53,18 @@ src/
   layout.css
 
   index.ts
-  server.ts
+  index.server.ts
   home.css
 
   about/
     index.ts
-    server.ts
+    index.server.ts
     about.css
 
   blog/
     [slug]/
       index.ts
-      server.ts
+      index.server.ts
       post.css
 ```
 
@@ -73,7 +73,7 @@ src/
 - `layout.ts`: layout render module and layout client component module.
 - `layout.css`: global stylesheet for a directory layout.
 - `index.ts`: route render module and client component module.
-- `server.ts`: route server module.
+- `index.server.ts`: route server module.
 - any other `*.css`: scoped CSS module.
 
 Any directory may define its own `layout.ts` and `layout.css`, allowing nested layouts.
@@ -91,7 +91,7 @@ Examples:
 - `src/blog/[slug]/index.ts` -> `/blog/:slug`
 - `src/docs/[...parts]/index.ts` -> `/docs/*`
 
-`server.ts` is optional.
+`index.server.ts` is optional.
 
 ---
 
@@ -137,7 +137,7 @@ src/
 
     settings/
       index.ts
-      server.ts
+      index.server.ts
       settings.css
 ```
 
@@ -248,7 +248,7 @@ A route is rendered by:
 
 1. matching the request URL to a route,
 2. gathering parent layouts,
-3. running `loader()` from `server.ts` if present,
+3. running `loader()` from `index.server.ts` if present,
 4. executing the default export from `index.ts`,
 5. composing nested layouts by executing matched `layout.ts` modules from leaf to root,
 6. injecting CSS and scripts,
@@ -532,7 +532,7 @@ Server-side imports of `layout.ts` must not attempt to access `customElements`.
 
 ## Route server module API
 
-Each route may define a `server.ts`.
+Each route may define a `index.server.ts`.
 
 ### Named exports
 
@@ -547,7 +547,7 @@ A route server module may optionally export a default handler.
 
 If the default handler returns a `Response`, it fully owns the route response. No layout composition is applied.
 
-If a route defines a default export in `server.ts`, `loader()` must not also be used in that same route.
+If a route defines a default export in `index.server.ts`, `loader()` must not also be used in that same route.
 
 ### Example: default path
 
@@ -660,7 +660,7 @@ A request flows through the framework as follows:
 
 1. match the request URL to a route,
 2. gather parent layouts,
-3. if `server.ts` default export exists, execute it and return its `Response` directly,
+3. if `index.server.ts` default export exists, execute it and return its `Response` directly,
 4. otherwise run `loader()` if present,
 5. execute the default export from `index.ts`,
 6. execute matched `layout.ts` default exports from leaf to root, passing child content through `content`,
@@ -738,7 +738,7 @@ Possible manifest contents include route metadata and asset mappings.
 - Escaped-by-default template interpolation.
 - Native browser upgrade over virtual DOM hydration.
 - Scoped styling by default.
-- Convention first, with `server.ts` default export as a full-response escape hatch.
+- Convention first, with `index.server.ts` default export as a full-response escape hatch.
 
 ---
 
@@ -812,7 +812,7 @@ export class BlogSidebar extends HTMLElement {
 }
 ```
 
-### `src/blog/[slug]/server.ts`
+### `src/blog/[slug]/index.server.ts`
 
 ```ts
 export async function loader({ params }) {
@@ -831,7 +831,7 @@ Elemental v0 is a runtime-SSR framework for Web Components where:
 
 - routes are defined by directories containing `index.ts`,
 - route rendering is defined primarily by the default export in `index.ts`,
-- route logic lives in optional `server.ts`,
+- route logic lives in optional `index.server.ts`,
 - layouts are defined by `layout.ts` and `layout.css`,
 - layout rendering is defined by the default export in `layout.ts`,
 - routing is filesystem-based,
