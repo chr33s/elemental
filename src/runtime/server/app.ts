@@ -4,8 +4,18 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
+import {
+  resolveNearestServerErrorBoundaryForPathname,
+  resolveNearestServerErrorBoundaryForRoute,
+} from "../shared/error-boundaries.ts";
 import { html, type HtmlRenderable, type HtmlResult } from "../shared/html.ts";
-import type { LayoutProps, RouteParams, RouteProps, RouteServerContext } from "../shared/types.ts";
+import type {
+  ErrorProps,
+  LayoutProps,
+  RouteParams,
+  RouteProps,
+  RouteServerContext,
+} from "../shared/types.ts";
 import { renderDocument, renderSubtree } from "./render-document.ts";
 
 export interface StartServerOptions {
@@ -39,7 +49,16 @@ interface CompiledRouteServerModule {
   loader?: (context: RouteServerContext) => unknown;
 }
 
+interface CompiledServerErrorBoundaryModule {
+  default?: (props: ErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
+  head?: (props: ErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
+}
+
 const EMPTY_HTML = html``;
+const EMPTY_ASSETS: RouterPayload["assets"] = {
+  scripts: [],
+  stylesheets: [],
+};
 const ROUTER_HEADER_NAME = "x-elemental-router";
 
 export function startServer(options: StartServerOptions): Server {
@@ -60,6 +79,7 @@ export async function handleElementalRequest(
   options: StartServerOptions,
 ): Promise<Response> {
   const url = new URL(request.url);
+  const resolver = createServerModuleResolver(options.distDir);
 
   if (url.pathname.startsWith("/assets/")) {
     return serveAsset(url.pathname, options.distDir);
@@ -68,7 +88,14 @@ export async function handleElementalRequest(
   const matchedRoute = matchRoute(url.pathname, options.manifest.routes);
 
   if (matchedRoute === undefined) {
-    return textResponse("Not found", 404);
+    return renderServerErrorResponse({
+      error: null,
+      manifest: options.manifest,
+      request,
+      resolver,
+      status: 404,
+      statusText: "Not Found",
+    });
   }
 
   try {
@@ -76,11 +103,20 @@ export async function handleElementalRequest(
       manifest: options.manifest,
       matchedRoute,
       request,
-      resolver: createServerModuleResolver(options.distDir),
+      resolver,
     });
   } catch (error) {
     console.error(error);
-    return textResponse(error instanceof Error ? error.message : "Unexpected server error", 500);
+
+    return renderServerErrorResponse({
+      error,
+      manifest: options.manifest,
+      matchedRoute,
+      request,
+      resolver,
+      status: 500,
+      statusText: "Internal Server Error",
+    });
   }
 }
 
@@ -96,9 +132,10 @@ async function handleNodeRequest(
 
     await sendNodeResponse(response, renderedResponse, request.method ?? "GET");
   } catch (error) {
+    console.error(error);
     response.statusCode = 500;
     response.setHeader("content-type", "text/plain; charset=utf-8");
-    response.end(error instanceof Error ? error.message : "Unexpected server error");
+    response.end("500 Internal Server Error");
   }
 }
 
@@ -221,6 +258,86 @@ async function renderMatchedRoute(options: {
   });
 
   return htmlResponse(renderSubtree(document));
+}
+
+async function renderServerErrorResponse(options: {
+  error: unknown;
+  manifest: BuildManifest;
+  matchedRoute?: {
+    params: RouteParams;
+    route: BuildManifestRoute;
+  };
+  request: Request;
+  resolver: <TModule>(modulePath: string) => Promise<TModule>;
+  status: number;
+  statusText: string;
+}): Promise<Response> {
+  const url = new URL(options.request.url);
+  const resolvedBoundary =
+    options.matchedRoute === undefined
+      ? resolveNearestServerErrorBoundaryForPathname(options.manifest, url.pathname)
+      : resolveNearestServerErrorBoundaryForRoute(
+          options.matchedRoute.route,
+          options.matchedRoute.params,
+        );
+
+  if (resolvedBoundary === undefined) {
+    return textResponse(`${options.status} ${options.statusText}`, options.status);
+  }
+
+  try {
+    const boundaryModule = await options.resolver<CompiledServerErrorBoundaryModule>(
+      resolvedBoundary.modulePath,
+    );
+
+    if (typeof boundaryModule.default !== "function") {
+      throw new TypeError(
+        `Server error boundary ${resolvedBoundary.sourcePath} must export a default render function.`,
+      );
+    }
+
+    const props: ErrorProps = {
+      error: options.error,
+      params: resolvedBoundary.params,
+      request: options.request,
+      status: options.status,
+      statusText: options.statusText,
+      url,
+    };
+    const head =
+      typeof boundaryModule.head === "function" ? await boundaryModule.head(props) : EMPTY_HTML;
+    const body = await boundaryModule.default(props);
+
+    if (isRouterRequest(options.request)) {
+      return Response.json(
+        {
+          assets: EMPTY_ASSETS,
+          head: renderSubtree(head),
+          outlet: renderSubtree(body),
+          status: options.status,
+        } satisfies RouterPayload,
+        {
+          status: options.status,
+        },
+      );
+    }
+
+    return new Response(
+      renderDocument({
+        body,
+        head,
+      }),
+      {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+        },
+        status: options.status,
+      },
+    );
+  } catch (error) {
+    console.error(error);
+    return textResponse("500 Internal Server Error", 500);
+  }
 }
 
 async function serveAsset(assetPathname: string, distDir: string): Promise<Response> {
@@ -356,9 +473,9 @@ function matchRoute(
   routes: BuildManifestRoute[],
 ):
   | {
-    params: RouteParams;
-    route: BuildManifestRoute;
-  }
+      params: RouteParams;
+      route: BuildManifestRoute;
+    }
   | undefined {
   const pathnameSegments = splitPathSegments(pathname);
 

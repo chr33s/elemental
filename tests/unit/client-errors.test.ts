@@ -1,0 +1,193 @@
+import { html } from "elemental";
+import { describe, expect, it, vi } from "vitest";
+import type { BuildManifest, BuildManifestRoute } from "../../src/build/manifest.ts";
+import {
+  recoverFromClientError,
+  renderClientErrorBoundary,
+} from "../../src/runtime/client/errors.ts";
+
+describe("client error recovery helpers", () => {
+  it("renders the nearest matched-route browser boundary and updates head after outlet", async () => {
+    const route = createRoute({
+      browserBoundaryModules: ["assets/root-error.js", "assets/blog-error.js"],
+      browserBoundarySources: ["app/src/error.ts", "app/src/blog/[slug]/error.ts"],
+      pattern: "/blog/:slug",
+      source: "app/src/blog/[slug]/index.ts",
+    });
+    const manifest = createManifest([route]);
+    const calls: string[] = [];
+
+    const recovered = await recoverFromClientError({
+      error: new Error("boom"),
+      fallback: () => {
+        calls.push("fallback");
+      },
+      manifest,
+      matchedRoute: {
+        params: {
+          slug: "alpha",
+        },
+        route,
+      },
+      renderHead: (head) => {
+        calls.push(`head:${head}`);
+      },
+      renderOutlet: (outlet) => {
+        calls.push(`outlet:${outlet}`);
+      },
+      resolver: async (modulePath) => {
+        expect(modulePath).toBe("assets/blog-error.js");
+
+        return {
+          default(props) {
+            return html`<main>${String(props.params.slug)}</main>`;
+          },
+          head(props) {
+            return html`<title>${String(props.params.slug)}</title>`;
+          },
+        };
+      },
+      url: new URL("http://example.com/blog/alpha"),
+    });
+
+    expect(recovered).toBe(true);
+    expect(calls).toEqual(["outlet:<main>alpha</main>", "head:<title>alpha</title>"]);
+  });
+
+  it("resolves unmatched client failures through the nearest dynamic ancestor boundary", async () => {
+    const route = createRoute({
+      browserBoundaryModules: ["assets/root-error.js", "assets/blog-slug-error.js"],
+      browserBoundarySources: ["app/src/error.ts", "app/src/blog/[slug]/error.ts"],
+      pattern: "/blog/:slug/comments",
+      source: "app/src/blog/[slug]/comments/index.ts",
+    });
+    const manifest = createManifest([route]);
+
+    const renderedBoundary = await renderClientErrorBoundary({
+      error: new Error("failed navigation"),
+      manifest,
+      resolver: async () => ({
+        default(props) {
+          return html`<main>${String(props.params.slug)}</main>`;
+        },
+      }),
+      url: new URL("http://example.com/blog/alpha/missing"),
+    });
+
+    expect(renderedBoundary?.boundary.sourcePath).toBe("app/src/blog/[slug]/error.ts");
+    expect(renderedBoundary?.outlet).toBe("<main>alpha</main>");
+  });
+
+  it("falls back to a full navigation when no browser boundary exists", async () => {
+    const route = createRoute({
+      browserBoundaryModules: [],
+      browserBoundarySources: [],
+      pattern: "/blog/:slug",
+      source: "app/src/blog/[slug]/index.ts",
+    });
+    const manifest = createManifest([route]);
+    const fallback = vi.fn<() => void>();
+    const logger = {
+      error: vi.fn<(...args: unknown[]) => void>(),
+    };
+
+    const recovered = await recoverFromClientError({
+      error: new Error("boom"),
+      fallback,
+      logger,
+      manifest,
+      matchedRoute: {
+        params: {
+          slug: "alpha",
+        },
+        route,
+      },
+      renderHead: vi.fn<(head: string) => void>(),
+      renderOutlet: vi.fn<(outlet: string) => void>(),
+      resolver: async () => ({}),
+      url: new URL("http://example.com/blog/alpha"),
+    });
+
+    expect(recovered).toBe(false);
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("logs and falls back when the chosen browser boundary throws", async () => {
+    const route = createRoute({
+      browserBoundaryModules: ["assets/root-error.js"],
+      browserBoundarySources: ["app/src/error.ts"],
+      pattern: "/boom",
+      source: "app/src/boom/index.ts",
+    });
+    const manifest = createManifest([route]);
+    const fallback = vi.fn<() => void>();
+    const logger = {
+      error: vi.fn<(...args: unknown[]) => void>(),
+    };
+
+    const recovered = await recoverFromClientError({
+      error: new Error("boom"),
+      fallback,
+      logger,
+      manifest,
+      matchedRoute: {
+        params: {},
+        route,
+      },
+      renderHead: vi.fn<(head: string) => void>(),
+      renderOutlet: vi.fn<(outlet: string) => void>(),
+      resolver: async () => ({
+        default() {
+          throw new Error("boundary exploded");
+        },
+      }),
+      url: new URL("http://example.com/boom"),
+    });
+
+    expect(recovered).toBe(false);
+    expect(fallback).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledOnce();
+  });
+});
+
+function createManifest(routes: BuildManifestRoute[]): BuildManifest {
+  return {
+    appDir: "app/src",
+    assets: {
+      clientEntry: "assets/client.js",
+    },
+    generatedAt: "2026-04-12T00:00:00.000Z",
+    routes,
+  };
+}
+
+function createRoute(options: {
+  browserBoundaryModules: string[];
+  browserBoundarySources: string[];
+  pattern: string;
+  source: string;
+}): BuildManifestRoute {
+  return {
+    assets: {
+      layoutCss: [],
+      scripts: [],
+    },
+    browser: {
+      errorBoundaries: options.browserBoundaryModules,
+      layouts: [],
+      route: "assets/route.js",
+    },
+    errorBoundaries: options.browserBoundarySources,
+    layoutStylesheets: [],
+    layouts: [],
+    pattern: options.pattern,
+    server: {
+      layouts: [],
+      route: "server/route.js",
+      serverErrorBoundaries: [],
+    },
+    serverErrorBoundaries: [],
+    source: options.source,
+  };
+}

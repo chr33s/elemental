@@ -1,6 +1,8 @@
 export { HtmlResult, escapeHtml, html, renderToString, safeHtml } from "./runtime/shared/html.ts";
 export type { HtmlRenderable } from "./runtime/shared/html.ts";
 export type {
+  ClientErrorProps,
+  ErrorProps,
   LayoutProps,
   RouteParams,
   RouteProps,

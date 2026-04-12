@@ -2,6 +2,23 @@ import type { HtmlRenderable, HtmlResult } from "./html.ts";
 
 export type RouteParams = Record<string, string | string[]>;
 
+export interface ErrorProps {
+  error: unknown;
+  params: RouteParams;
+  request: Request;
+  status: number;
+  statusText: string;
+  url: URL;
+}
+
+export interface ClientErrorProps {
+  error: unknown;
+  params: RouteParams;
+  status?: number;
+  statusText?: string;
+  url: URL;
+}
+
 export interface RouteProps {
   params: RouteParams;
   data: Record<string, unknown>;
