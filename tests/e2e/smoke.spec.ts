@@ -241,8 +241,11 @@ test("recovers client-side navigation through the nearest browser boundary", asy
 
   await expect(page.getByRole("heading", { name: "Recovered Route" })).toBeVisible();
   await expect(page.locator("#recovery-message")).toHaveText("recoverable client failure");
+
+  // Verify error.ts head() output updates document.head during client-side recovery
   await expect(page).toHaveTitle("Recovered");
   await expect(page.locator('meta[name="recovery-status"]')).toHaveAttribute("content", "200");
+
   await expect(
     page.evaluate(
       () =>

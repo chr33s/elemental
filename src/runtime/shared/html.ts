@@ -58,6 +58,21 @@ export class HtmlResult {
   }
 }
 
+/**
+ * Tagged template for rendering HTML with automatic escaping.
+ *
+ * Interpolated values are escaped by default unless wrapped in `safeHtml()`.
+ * Attribute values are automatically quoted. Arrays are flattened.
+ * Null, undefined, and false are ignored.
+ *
+ * @example
+ * ```ts
+ * const name = "<script>";
+ * html`<p>Hello ${name}</p>` // <p>Hello &lt;script&gt;</p>
+ *
+ * html`<div class=${className}>...</div>` // <div class="value">...</div>
+ * ```
+ */
 export function html(strings: TemplateStringsArray, ...values: HtmlRenderable[]): HtmlResult {
   let output = "";
   const parserState: TemplateParserState = {
@@ -88,6 +103,10 @@ export function html(strings: TemplateStringsArray, ...values: HtmlRenderable[])
   return createHtmlResult(output);
 }
 
+/**
+ * Wraps raw CSS text for server-side use.
+ * This is used internally by the CSS module plugin on the server.
+ */
 export function cssText(value: string): CssTextValue {
   return {
     [CSS_TEXT_BRAND]: true,
@@ -101,6 +120,17 @@ export function cssText(value: string): CssTextValue {
   };
 }
 
+/**
+ * Marks a string as trusted HTML that should bypass escaping.
+ *
+ * **Warning**: Only use with content you trust. Improper use can lead to XSS vulnerabilities.
+ *
+ * @example
+ * ```ts
+ * const trustedMarkup = "<strong>Safe</strong>";
+ * html`<div>${safeHtml(trustedMarkup)}</div>` // <div><strong>Safe</strong></div>
+ * ```
+ */
 export function safeHtml(value: string): SafeHtmlValue {
   return {
     [SAFE_HTML_BRAND]: true,
@@ -108,10 +138,21 @@ export function safeHtml(value: string): SafeHtmlValue {
   };
 }
 
+/**
+ * Converts an HtmlRenderable value to a string.
+ * This is used internally by the rendering pipeline.
+ */
 export function renderToString(value: HtmlRenderable): string {
   return renderRenderable(value);
 }
 
+/**
+ * Escapes HTML special characters to prevent XSS attacks.
+ *
+ * Escapes: &, <, >, ", '
+ *
+ * This is used internally by the `html` tagged template.
+ */
 export function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")

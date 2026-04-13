@@ -57,6 +57,7 @@ The built-in example app exercises the framework conventions that are already im
 - `npm run build -- --target node`: emit only the Node deployment artifacts
 - `npm run build -- --target worker`: emit only the Worker deployment artifacts and generated Wrangler config
 - `npm run build -- --watch`: rerun the build when framework or app source files change using Node's watcher and built-in TypeScript support
+- `npm run bench`: run the built-in build and runtime benchmark harness against the canonical example app
 - `npm run dev`: run `elemental dev` with rebuilds, server restarts, live reload, layout stylesheet hot swaps, and safe route-subtree rerenders for browser-only updates
 - `npm run start`: start the generated server from `dist/server.js`
 - `npm run test`: run the unit suite and Playwright smoke coverage
@@ -225,6 +226,438 @@ The update modes are:
 
 JavaScript HMR in v0 is intentionally framework-aware rather than module-local. Elemental reloads the current route payload, updates managed head content, reloads any new browser chunks, and replaces the current `data-route-outlet` subtree. That preserves the surrounding document shell while still falling back to a full reload when correctness is uncertain.
 
+### Troubleshooting
+
+- `EMFILE` or watcher instability during `npm run dev`: Node's watcher can hit file-descriptor limits or sandbox wrapper behavior in editor-integrated terminals. Re-run the command in a regular shell first, then reduce other watch-heavy processes if the problem persists.
+- `listen EPERM` or port bind failures: confirm the target port is free. In sandboxed environments, local listeners can be blocked even when the app is correct; verify the same command outside the sandbox before treating it as a framework bug.
+- A change triggers a full reload instead of a route rerender: that is expected for server-module edits, route graph changes, runtime changes, custom element definition changes, and other updates that cross an unsafe boundary.
+- Styles do not hot swap the way you expect: only `layout.css` changes take the stylesheet hot-swap path. Other CSS changes are treated conservatively and may trigger a full reload path instead.
+
+## Benchmarks
+
+Elemental includes a lightweight benchmark harness for repeatable local measurements against `spec/fixtures/basic-app/src`.
+
+```bash
+npm run bench
+```
+
+The benchmark currently reports:
+
+- full build time for the canonical example app,
+- steady-state full-document SSR request timings, and
+- steady-state router payload request timings.
+
+Treat the output as a local baseline rather than a universal performance claim. Hardware, filesystem speed, Node version, and process warmup all affect the numbers.
+
+## API Reference
+
+### HTML Rendering
+
+#### `html`
+
+```ts
+function html(strings: TemplateStringsArray, ...values: HtmlRenderable[]): HtmlResult;
+```
+
+Tagged template for rendering HTML with automatic escaping. Interpolated values are escaped by default unless wrapped in `safeHtml()`. Attribute values are automatically quoted. Arrays are flattened. Null, undefined, and false are ignored.
+
+**Example:**
+
+```ts
+const name = "<script>";
+html`<p>Hello ${name}</p>`; // <p>Hello &lt;script&gt;</p>
+
+html`<div class=${className}>...</div>`; // <div class="value">...</div>
+```
+
+#### `safeHtml`
+
+```ts
+function safeHtml(value: string): SafeHtmlValue;
+```
+
+Marks a string as trusted HTML that should bypass escaping. **Warning**: Only use with content you trust. Improper use can lead to XSS vulnerabilities.
+
+**Example:**
+
+```ts
+const trustedMarkup = "<strong>Safe</strong>";
+html`<div>${safeHtml(trustedMarkup)}</div>`; // <div><strong>Safe</strong></div>
+```
+
+#### `escapeHtml`
+
+```ts
+function escapeHtml(value: string): string;
+```
+
+Escapes HTML special characters (&, <, >, ", ') to prevent XSS attacks. Used internally by the `html` tagged template.
+
+### Type Definitions
+
+#### `RouteProps`
+
+Props passed to route render functions (`index.ts` default export).
+
+```ts
+interface RouteProps {
+  params: RouteParams; // Route parameters from dynamic URL segments
+  data: Record<string, unknown>; // Data from loader()
+  url: URL; // Current page URL
+}
+```
+
+#### `RouteServerContext`
+
+Context object passed to server-side route functions (`loader()` and `action()` in `index.server.ts`).
+
+```ts
+interface RouteServerContext {
+  request: Request; // The incoming HTTP request
+  params: RouteParams; // Route parameters from URL
+  url: URL; // Parsed request URL
+}
+```
+
+#### `LayoutProps`
+
+Props passed to layout render functions (`layout.ts` default export). Layouts compose from root to leaf.
+
+```ts
+interface LayoutProps {
+  outlet: HtmlResult; // Composed child content
+  head: HtmlResult; // Aggregated head content
+  params: RouteParams; // Route parameters
+  url: URL; // Current page URL
+}
+```
+
+#### `ErrorProps`
+
+Props passed to server-side error boundary modules (`error.server.ts`).
+
+```ts
+interface ErrorProps {
+  error: unknown; // The error that was thrown
+  params: RouteParams; // Route parameters
+  request: Request; // The incoming request
+  status: number; // HTTP status (404 or 500)
+  statusText: string; // HTTP status text
+  url: URL; // Parsed request URL
+}
+```
+
+#### `ClientErrorProps`
+
+Props passed to client-side error boundary modules (`error.ts`).
+
+```ts
+interface ClientErrorProps {
+  error: unknown; // The error during navigation
+  params: RouteParams; // Route parameters
+  status?: number; // HTTP status if available
+  statusText?: string; // HTTP status text if available
+  url: URL; // Current page URL
+}
+```
+
+#### `RouteParams`
+
+Route parameter values extracted from dynamic URL segments.
+
+```ts
+type RouteParams = Record<string, string | string[]>;
+```
+
+- Dynamic segments like `[slug]` produce `string` values
+- Catch-all segments like `[...path]` produce `string[]` values
+
+### Server Functions
+
+#### `loader()`
+
+Optional function in `index.server.ts` that loads data for a route.
+
+```ts
+export async function loader(
+  context: RouteServerContext,
+): Promise<Record<string, unknown> | Response>;
+```
+
+- Returns data object that becomes available as `props.data` in the route render function
+- Can return a `Response` to bypass layout composition and return directly
+- Only executed on GET requests
+
+**Example:**
+
+```ts
+export async function loader({ params }: RouteServerContext) {
+  return {
+    title: `Post ${params.slug}`,
+    content: await fetchPost(params.slug),
+  };
+}
+```
+
+#### `action()`
+
+Optional function in `index.server.ts` that handles mutations (POST, PUT, DELETE, PATCH).
+
+```ts
+export async function action(context: RouteServerContext): Promise<Response>;
+```
+
+- **Must return a `Response` in v0** (redirect, error, or full document)
+- Executed before route rendering on mutation requests
+- Non-Response returns trigger 500 errors
+
+**Example:**
+
+```ts
+export async function action({ request, url }: RouteServerContext) {
+  const form = await request.formData();
+  await saveEntry(form);
+  return Response.redirect(new URL("/success", url), 303);
+}
+```
+
+#### `head()`
+
+Optional function in `index.ts` or `error.ts` that provides document head content.
+
+```ts
+export function head(props: RouteProps | ClientErrorProps): HtmlRenderable;
+```
+
+- Returns HTML to be inserted into `<head>`
+- Composed through layouts via `LayoutProps.head`
+- Supports `<title>`, `<meta>`, `<link>`, etc.
+
+**Example:**
+
+```ts
+export function head(props: RouteProps) {
+  return html`<title>${props.data.title}</title>
+    <meta name="description" content=${props.data.description} />`;
+}
+```
+
+### Route Module Exports
+
+#### Route Render (`index.ts`)
+
+```ts
+export default function routeName(props: RouteProps): HtmlRenderable {
+  return html`<main>...</main>`;
+}
+
+// Optional
+export function head(props: RouteProps): HtmlRenderable {
+  return html`<title>...</title>`;
+}
+```
+
+#### Layout Render (`layout.ts`)
+
+```ts
+export default function layoutName(props: LayoutProps): HtmlRenderable {
+  return html`<!doctype html>
+    <html>
+      <head>
+        ${props.head}
+      </head>
+      <body>
+        <div data-route-outlet>${props.outlet}</div>
+      </body>
+    </html>`;
+}
+```
+
+#### Server Route (`index.server.ts`)
+
+```ts
+// Option 1: Loader for GET requests
+export async function loader(ctx: RouteServerContext) {
+  return { data: "value" };
+}
+
+// Option 2: Action for mutations
+export async function action(ctx: RouteServerContext): Promise<Response> {
+  return Response.redirect("/success", 303);
+}
+
+// Option 3: Full response guard (bypasses route rendering)
+export default async function guard(ctx: RouteServerContext): Promise<Response> {
+  if (!authorized) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+  // Must return Response when used
+}
+```
+
+#### Error Boundaries
+
+Server error boundary (`error.server.ts`):
+
+```ts
+export function head(props: ErrorProps): HtmlRenderable {
+  return html`<title>Error ${props.status}</title>`;
+}
+
+export default function errorBoundary(props: ErrorProps): HtmlRenderable {
+  return html`<main>
+    <h1>Error ${props.status}</h1>
+    <p>${String(props.error)}</p>
+  </main>`;
+}
+```
+
+Client error boundary (`error.ts`):
+
+```ts
+export function head(props: ClientErrorProps): HtmlRenderable {
+  return html`<title>Error</title>`;
+}
+
+export default function errorRecovery(props: ClientErrorProps): HtmlRenderable {
+  return html`<section>
+    <h1>Recovered</h1>
+    <p>${String(props.error)}</p>
+  </section>`;
+}
+```
+
+### Custom Elements
+
+Named exports from `index.ts` or `layout.ts` that are `HTMLElement` subclasses with `static tagName` are automatically registered in the browser.
+
+```ts
+export class MyButton extends HTMLElement {
+  static tagName = "my-button";
+
+  connectedCallback() {
+    this.innerHTML = "<button>Click me</button>";
+  }
+}
+
+export default function route() {
+  return html`<my-button></my-button>`;
+}
+```
+
+- Registration happens automatically in the browser runtime
+- Skipped if `customElements.get(tagName)` already exists
+- Must have valid custom element tag name (contains hyphen)
+- Stripped from server bundles (never execute on server)
+
+## Deployment
+
+### Node.js with srvx
+
+Elemental generates a Node.js server adapter using [srvx](https://github.com/h3js/srvx).
+
+**Build for Node:**
+
+```bash
+npm run build -- --target node
+# or build both targets:
+npm run build
+```
+
+**Output:**
+
+- `dist/server.js` - Main server module
+- `dist/srvx.js` - srvx adapter entry
+- `dist/assets/*` - Browser assets
+- `dist/manifest.json` - Route manifest
+
+**Run in production:**
+
+```bash
+node dist/srvx.js
+```
+
+**Environment variables:**
+
+- `PORT` - Server port (default: 3000)
+- `HOST` - Bind address (default: 0.0.0.0)
+
+**Deployment targets:**
+
+- Any Node.js 24+ hosting platform
+- Traditional VPS or bare metal servers
+- Container platforms (Docker, Kubernetes)
+- PaaS platforms (Heroku, Railway, Render, Fly.io)
+
+**Example Dockerfile:**
+
+```dockerfile
+FROM node:24-alpine
+WORKDIR /app
+COPY dist ./dist
+COPY package.json ./
+EXPOSE 3000
+CMD ["node", "dist/srvx.js"]
+```
+
+### Cloudflare Workers
+
+Elemental generates a Cloudflare Workers adapter with static asset bindings.
+
+**Build for Workers:**
+
+```bash
+npm run build -- --target worker
+# or build both targets:
+npm run build
+```
+
+**Output:**
+
+- `dist/worker.js` - Worker entry point
+- `dist/wrangler.jsonc` - Generated Wrangler config
+- `dist/assets/*` - Browser assets
+- `dist/manifest.json` - Route manifest
+
+**Deploy with Wrangler:**
+
+```bash
+# Install wrangler if not already installed
+npm install -g wrangler
+
+# Deploy from your project root
+wrangler deploy dist/worker.js --config dist/wrangler.jsonc
+```
+
+**Development with Wrangler:**
+
+```bash
+wrangler dev dist/worker.js --config dist/wrangler.jsonc
+```
+
+**Wrangler configuration:**
+
+The generated `dist/wrangler.jsonc` includes:
+
+- Asset bindings for static files
+- Worker-first routing for SSR requests
+- Appropriate build settings
+
+**Environment variables:**
+
+Workers environment variables can be configured via `wrangler.toml` or the Cloudflare dashboard.
+
+**Deployment targets:**
+
+- Cloudflare Workers (global edge network)
+- Supports all Workers features (KV, Durable Objects, R2, etc.)
+
+**Limitations:**
+
+- No Node.js built-in modules (uses Web APIs only)
+- Build validates Worker-safe code
+- Some server-side patterns may need adaptation
+
 ## Release Checklist
 
 Use this checklist as the phase-level release gate for v0:
@@ -248,3 +681,36 @@ Use this checklist as the phase-level release gate for v0:
 - Browser-reachable modules cannot import `*.server.ts` files.
 - `error.ts` is browser-only and is excluded from the server bundle.
 - `elemental dev` supports full-page live reload, `layout.css` hot swaps, and safe route-subtree rerenders with automatic fallback to reload when an update crosses an unsafe boundary.
+
+## Versioning And Compatibility
+
+Elemental follows semantic versioning for published releases.
+
+- Patch releases (`x.y.Z`) are reserved for bug fixes, documentation fixes, and internal changes that do not change the documented public API or framework conventions.
+- Minor releases (`x.Y.z`) may add new capabilities, new documented exports, and new conventions in a backwards-compatible way.
+- Major releases (`X.y.z`) may change route-module contracts, build output shape, runtime behavior, or public exports in ways that require application changes.
+
+The public compatibility surface for v0/v1 is:
+
+- documented exports from `elemental`,
+- documented route-module conventions (`index.ts`, `index.server.ts`, `layout.ts`, `layout.css`, `error.server.ts`, `error.ts`),
+- manifest and build artifacts described in this README, and
+- the command-line flows documented under `npm run build`, `npm run dev`, and `npm run start`.
+
+When a change needs a migration path, the deprecation policy is:
+
+- document the replacement in the README and release notes,
+- keep the old behavior for at least one minor release when practical, and
+- remove deprecated behavior only in the next major release unless keeping it would be incorrect or unsafe.
+
+## Upgrade Guidance
+
+Use this checklist when moving between Elemental releases:
+
+1. Read the release notes for changes to route-module contracts, required Node versions, and build output.
+2. Re-run `npm run build`, `npm run typecheck`, and `npm run test` after upgrading.
+3. Verify any custom deployment wiring still matches the generated `dist/` artifacts for your target.
+4. Re-check browser-only modules for accidental `*.server.ts` imports if new validation rules were added.
+5. Review `error.server.ts`, `error.ts`, and `head()` behavior if the release mentions routing or recovery changes.
+
+For the initial v0 to v1 line, the intended upgrade expectation is no authoring-model reset: the existing route, layout, loader, action, and recovery conventions remain the baseline contract.

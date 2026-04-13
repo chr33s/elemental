@@ -400,6 +400,32 @@ export default function docsRoute(props: RouteProps) {
     expect(await response.text()).toBe("saved:Draft");
   });
 
+  it("bypasses layout composition when action() returns a Response", async () => {
+    const response = await handleElementalRequest(
+      new Request("http://example.com/submit", {
+        body: new URLSearchParams({
+          title: "TestPost",
+        }),
+        headers: {
+          "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        },
+        method: "POST",
+      }),
+      {
+        distDir: outDir,
+        manifest,
+      },
+    );
+
+    const body = await response.text();
+    expect(response.status).toBe(201);
+    expect(body).toBe("saved:TestPost");
+    expect(body).not.toContain("<!doctype html>");
+    expect(body).not.toContain("<html>");
+    expect(body).not.toContain("data-route-outlet");
+    expect(body).not.toContain('class="frame"');
+  });
+
   it("treats non-Response action returns as server errors", async () => {
     const response = await handleElementalRequest(
       new Request("http://example.com/checkpoint", {
