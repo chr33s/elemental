@@ -41,4 +41,3 @@ export interface LayoutProps {
   params: RouteParams;
   url: URL;
 }
-

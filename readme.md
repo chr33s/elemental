@@ -232,7 +232,7 @@ JavaScript HMR in v0 is intentionally framework-aware rather than module-local. 
 #### `html`
 
 ```ts
-function html(strings: TemplateStringsArray, ...values: HtmlRenderable[]): HtmlResult
+function html(strings: TemplateStringsArray, ...values: HtmlRenderable[]): HtmlResult;
 ```
 
 Tagged template for rendering HTML with automatic escaping. Interpolated values are escaped by default unless wrapped in `safeHtml()`. Attribute values are automatically quoted. Arrays are flattened. Null, undefined, and false are ignored.
@@ -249,7 +249,7 @@ html`<div class=${className}>...</div>`; // <div class="value">...</div>
 #### `safeHtml`
 
 ```ts
-function safeHtml(value: string): SafeHtmlValue
+function safeHtml(value: string): SafeHtmlValue;
 ```
 
 Marks a string as trusted HTML that should bypass escaping. **Warning**: Only use with content you trust. Improper use can lead to XSS vulnerabilities.
@@ -264,7 +264,7 @@ html`<div>${safeHtml(trustedMarkup)}</div>`; // <div><strong>Safe</strong></div>
 #### `escapeHtml`
 
 ```ts
-function escapeHtml(value: string): string
+function escapeHtml(value: string): string;
 ```
 
 Escapes HTML special characters (&, <, >, ", ') to prevent XSS attacks. Used internally by the `html` tagged template.
@@ -277,9 +277,9 @@ Props passed to route render functions (`index.ts` default export).
 
 ```ts
 interface RouteProps {
-  params: RouteParams;     // Route parameters from dynamic URL segments
-  data: Record<string, unknown>;  // Data from loader()
-  url: URL;                // Current page URL
+  params: RouteParams; // Route parameters from dynamic URL segments
+  data: Record<string, unknown>; // Data from loader()
+  url: URL; // Current page URL
 }
 ```
 
@@ -289,9 +289,9 @@ Context object passed to server-side route functions (`loader()` and `action()` 
 
 ```ts
 interface RouteServerContext {
-  request: Request;  // The incoming HTTP request
-  params: RouteParams;  // Route parameters from URL
-  url: URL;          // Parsed request URL
+  request: Request; // The incoming HTTP request
+  params: RouteParams; // Route parameters from URL
+  url: URL; // Parsed request URL
 }
 ```
 
@@ -301,10 +301,10 @@ Props passed to layout render functions (`layout.ts` default export). Layouts co
 
 ```ts
 interface LayoutProps {
-  outlet: HtmlResult;  // Composed child content
-  head: HtmlResult;    // Aggregated head content
+  outlet: HtmlResult; // Composed child content
+  head: HtmlResult; // Aggregated head content
   params: RouteParams; // Route parameters
-  url: URL;            // Current page URL
+  url: URL; // Current page URL
 }
 ```
 
@@ -314,12 +314,12 @@ Props passed to server-side error boundary modules (`error.server.ts`).
 
 ```ts
 interface ErrorProps {
-  error: unknown;      // The error that was thrown
+  error: unknown; // The error that was thrown
   params: RouteParams; // Route parameters
-  request: Request;    // The incoming request
-  status: number;      // HTTP status (404 or 500)
-  statusText: string;  // HTTP status text
-  url: URL;            // Parsed request URL
+  request: Request; // The incoming request
+  status: number; // HTTP status (404 or 500)
+  statusText: string; // HTTP status text
+  url: URL; // Parsed request URL
 }
 ```
 
@@ -329,11 +329,11 @@ Props passed to client-side error boundary modules (`error.ts`).
 
 ```ts
 interface ClientErrorProps {
-  error: unknown;       // The error during navigation
-  params: RouteParams;  // Route parameters
-  status?: number;      // HTTP status if available
-  statusText?: string;  // HTTP status text if available
-  url: URL;             // Current page URL
+  error: unknown; // The error during navigation
+  params: RouteParams; // Route parameters
+  status?: number; // HTTP status if available
+  statusText?: string; // HTTP status text if available
+  url: URL; // Current page URL
 }
 ```
 
@@ -342,7 +342,7 @@ interface ClientErrorProps {
 Route parameter values extracted from dynamic URL segments.
 
 ```ts
-type RouteParams = Record<string, string | string[]>
+type RouteParams = Record<string, string | string[]>;
 ```
 
 - Dynamic segments like `[slug]` produce `string` values
@@ -355,7 +355,9 @@ type RouteParams = Record<string, string | string[]>
 Optional function in `index.server.ts` that loads data for a route.
 
 ```ts
-export async function loader(context: RouteServerContext): Promise<Record<string, unknown> | Response>
+export async function loader(
+  context: RouteServerContext,
+): Promise<Record<string, unknown> | Response>;
 ```
 
 - Returns data object that becomes available as `props.data` in the route render function
@@ -378,7 +380,7 @@ export async function loader({ params }: RouteServerContext) {
 Optional function in `index.server.ts` that handles mutations (POST, PUT, DELETE, PATCH).
 
 ```ts
-export async function action(context: RouteServerContext): Promise<Response>
+export async function action(context: RouteServerContext): Promise<Response>;
 ```
 
 - **Must return a `Response` in v0** (redirect, error, or full document)
@@ -400,7 +402,7 @@ export async function action({ request, url }: RouteServerContext) {
 Optional function in `index.ts` or `error.ts` that provides document head content.
 
 ```ts
-export function head(props: RouteProps | ClientErrorProps): HtmlRenderable
+export function head(props: RouteProps | ClientErrorProps): HtmlRenderable;
 ```
 
 - Returns HTML to be inserted into `<head>`
@@ -437,7 +439,9 @@ export function head(props: RouteProps): HtmlRenderable {
 export default function layoutName(props: LayoutProps): HtmlRenderable {
   return html`<!doctype html>
     <html>
-      <head>${props.head}</head>
+      <head>
+        ${props.head}
+      </head>
       <body>
         <div data-route-outlet>${props.outlet}</div>
       </body>
@@ -537,6 +541,7 @@ npm run build
 ```
 
 **Output:**
+
 - `dist/server.js` - Main server module
 - `dist/srvx.js` - srvx adapter entry
 - `dist/assets/*` - Browser assets
@@ -549,10 +554,12 @@ node dist/srvx.js
 ```
 
 **Environment variables:**
+
 - `PORT` - Server port (default: 3000)
 - `HOST` - Bind address (default: 0.0.0.0)
 
 **Deployment targets:**
+
 - Any Node.js 24+ hosting platform
 - Traditional VPS or bare metal servers
 - Container platforms (Docker, Kubernetes)
@@ -582,6 +589,7 @@ npm run build
 ```
 
 **Output:**
+
 - `dist/worker.js` - Worker entry point
 - `dist/wrangler.jsonc` - Generated Wrangler config
 - `dist/assets/*` - Browser assets
@@ -606,6 +614,7 @@ wrangler dev dist/worker.js --config dist/wrangler.jsonc
 **Wrangler configuration:**
 
 The generated `dist/wrangler.jsonc` includes:
+
 - Asset bindings for static files
 - Worker-first routing for SSR requests
 - Appropriate build settings
@@ -615,10 +624,12 @@ The generated `dist/wrangler.jsonc` includes:
 Workers environment variables can be configured via `wrangler.toml` or the Cloudflare dashboard.
 
 **Deployment targets:**
+
 - Cloudflare Workers (global edge network)
 - Supports all Workers features (KV, Durable Objects, R2, etc.)
 
 **Limitations:**
+
 - No Node.js built-in modules (uses Web APIs only)
 - Build validates Worker-safe code
 - Some server-side patterns may need adaptation

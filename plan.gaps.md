@@ -19,6 +19,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 ### Phase 1: Bootstrap The Framework Skeleton ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ `package.json` with build, dev, start, test, and typecheck commands
 - ✅ TypeScript configuration for ESM output
 - ✅ Initial CLI entrypoint for `npx elemental`
@@ -27,6 +28,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 - ✅ Browser test setup for navigation and form behavior
 
 **Gaps:**
+
 - ✅ None - Phase 1 is complete
 
 ---
@@ -34,6 +36,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 ### Phase 2: Implement The Core HTML Runtime ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ `html` tagged template helper
 - ✅ `safeHtml` trusted wrapper
 - ✅ `HtmlResult` internal representation
@@ -42,6 +45,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 **Implementation Location:** `src/runtime/shared/html.ts`
 
 **Gaps:**
+
 - ✅ None - All acceptance criteria met based on test coverage in `tests/unit/html.test.ts`
 
 ---
@@ -49,6 +53,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 ### Phase 3: Build Route Discovery And Validation ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Filesystem scanner for app directories
 - ✅ Route pattern parser for static, dynamic, and catch-all segments
 - ✅ Ancestor resolution for layouts, `error.ts`, and `error.server.ts`
@@ -57,6 +62,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 **Implementation Location:** `src/build/discover.ts`
 
 **Gaps:**
+
 - ✅ None - Route discovery is comprehensive with good test coverage
 
 ---
@@ -64,6 +70,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 ### Phase 4: Build The Bundling Pipeline ⚠️ MOSTLY COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Browser bundling for `index.ts`, `layout.ts`, and `error.ts`
 - ✅ Server bundling for SSR modules and server-only route modules
 - ✅ `oxc` transforms for graph isolation and named export stripping
@@ -77,6 +84,7 @@ This document reviews the Elemental implementation against `plan.md` and identif
 #### 1. Plugin Organization Does Not Match Plan Structure
 
 **Plan Expected:**
+
 ```
 src/build/plugins/
   css.ts
@@ -85,6 +93,7 @@ src/build/plugins/
 ```
 
 **Actual Implementation:**
+
 - All plugins are defined inline in `src/build/index.ts` as functions:
   - `createBrowserServerBoundaryPlugin()` (lines 484-497)
   - `createCssModulePlugin()` (lines 499-547)
@@ -94,6 +103,7 @@ src/build/plugins/
 **Impact:** Low - functionality exists, just organized differently
 
 **Recommendation for v1:**
+
 - **Option A (Minimal):** Document this architectural decision and why inline plugins are preferred
 - **Option B (Align with Plan):** Extract plugins to `src/build/plugins/` directory for better maintainability and separation of concerns
 
@@ -104,6 +114,7 @@ src/build/plugins/
 **Gap:** The plan describes manifest generation as a separate concern, but it's tightly coupled to the build process.
 
 **Recommendation for v1:**
+
 - Document why manifest generation is build-integrated rather than standalone
 - OR extract manifest creation logic to `src/build/manifest.ts` for better testability
 
@@ -112,6 +123,7 @@ src/build/plugins/
 ### Phase 5: Implement The Server Runtime ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Request router
 - ✅ Route server context creation
 - ✅ Full document SSR renderer
@@ -119,6 +131,7 @@ src/build/plugins/
 - ✅ Action, loader, and full-response execution paths
 
 **Implementation Locations:**
+
 - `src/runtime/server/app.ts` (exports only)
 - `src/runtime/server/core.ts` (actual implementation)
 - `src/runtime/server/render-document.ts`
@@ -129,6 +142,7 @@ src/build/plugins/
 #### Missing Dedicated Files from Plan
 
 **Plan Expected:**
+
 ```
 src/runtime/server/
   render-partial.ts
@@ -138,6 +152,7 @@ src/runtime/server/
 ```
 
 **Actual State:**
+
 - No `render-partial.ts` - partial rendering is in `core.ts`
 - No `errors.ts` - error handling is in `core.ts` and shared in `src/runtime/shared/error-boundaries.ts`
 - No `routing.ts` - routing is in `core.ts`
@@ -146,6 +161,7 @@ src/runtime/server/
 **Impact:** Low - all functionality exists, just consolidated differently
 
 **Recommendation for v1:**
+
 - **Option A:** Document the actual module organization and reasoning
 - **Option B:** Refactor to match plan structure if module sizes become unwieldy (current `core.ts` is manageable)
 
@@ -154,17 +170,20 @@ src/runtime/server/
 ### Phase 6: Implement Error Resolution And Recovery ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Shared error-boundary resolution helpers
 - ✅ Server-side `error.server.ts` rendering path
 - ✅ Minimal built-in error document shell
 - ✅ Client-side `error.ts` rendering path
 
 **Implementation Locations:**
+
 - `src/runtime/shared/error-boundaries.ts`
 - `src/runtime/client/errors.ts`
 - Error handling in `src/runtime/server/core.ts`
 
 **Gaps:**
+
 - ✅ None - test coverage in `tests/unit/error-runtime.test.ts` confirms implementation
 
 ---
@@ -172,6 +191,7 @@ src/runtime/server/
 ### Phase 7: Implement The Browser Runtime ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Browser bootstrap entrypoint
 - ✅ Automatic custom element registration
 - ✅ Client router with navigation interception and DOM swapping
@@ -185,6 +205,7 @@ src/runtime/server/
 #### Missing Dedicated Files from Plan
 
 **Plan Expected:**
+
 ```
 src/runtime/client/
   navigation.ts
@@ -194,11 +215,13 @@ src/runtime/client/
 ```
 
 **Actual State:**
+
 - All functionality is in `bootstrap.ts` (one large file with all client runtime logic)
 
 **Impact:** Low for v0, Medium for v1 maintainability
 
 **Recommendation for v1:**
+
 - Consider splitting `bootstrap.ts` into smaller modules as planned for better code organization:
   - Extract custom element registration logic → `register-elements.ts`
   - Extract navigation handling → `navigation.ts`
@@ -211,6 +234,7 @@ src/runtime/client/
 ### Phase 8: Implement Styling And Asset Composition ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Root-to-leaf layout CSS injection
 - ✅ Route and layout JS asset tracking
 - ✅ Scoped CSS SSR support for Shadow DOM use cases
@@ -218,6 +242,7 @@ src/runtime/client/
 **Implementation Location:** CSS plugin in `src/build/index.ts`, asset handling in `render-document.ts`
 
 **Gaps:**
+
 - ✅ None - CSS behavior matches spec
 
 ---
@@ -227,6 +252,7 @@ src/runtime/client/
 **Plan Required Tests:**
 
 #### Unit Tests
+
 - ✅ HTML escaping, attribute quoting, and `safeHtml` behavior - `tests/unit/html.test.ts`
 - ✅ Route parsing and specificity sorting - `tests/unit/routes.test.ts`
 - ✅ Ancestor layout and error boundary resolution - `tests/unit/error-runtime.test.ts`
@@ -234,28 +260,31 @@ src/runtime/client/
 - ✅ Custom element detection and registration skipping - `tests/unit/client-bootstrap.test.ts`
 
 #### Integration Tests
+
 - ✅ Full document rendering with nested layouts - `tests/unit/server-runtime.test.ts`
 - ✅ Dynamic route params and catch-all params - `tests/unit/routes.test.ts`
 - ✅ `loader()` data flow into `index.ts` - `tests/unit/server-runtime.test.ts`
 - ✅ `action()` behavior for mutations - `tests/unit/server-runtime.test.ts`
 - ✅ `index.server.ts` default export bypass behavior - `tests/unit/server-runtime.test.ts`
 - ✅ `loader()` returning a `Response` bypasses layout composition - `tests/unit/server-runtime.test.ts`
-- ⚠️ `action()` returning a `Response` bypasses layout composition - *Likely covered but needs explicit test case verification*
+- ⚠️ `action()` returning a `Response` bypasses layout composition - _Likely covered but needs explicit test case verification_
 - ✅ Error rendering for 404 and 500 cases - `tests/unit/error-runtime.test.ts`
 - ✅ Unmatched-route `error.server.ts` resolution - `tests/unit/error-runtime.test.ts`
 - ✅ `error.server.ts` render failures fall back to plain-text 500 - `tests/unit/error-runtime.test.ts`
 - ✅ CSS handling in server and browser builds - `tests/unit/build.test.ts`
 
 #### Browser End-to-End Tests
+
 - ✅ Same-origin navigation swaps only `data-route-outlet` - `tests/e2e/smoke.spec.ts`
 - ✅ Head updates during client transitions - `tests/e2e/smoke.spec.ts`
 - ✅ Route-level asset loading - `tests/e2e/smoke.spec.ts`
 - ✅ Progressive enhancement for forms - `tests/e2e/smoke.spec.ts`
 - ✅ Browser-side error boundary recovery - `tests/e2e/smoke.spec.ts`
-- ⚠️ `error.ts` `head()` output updates `document.head` during client-side recovery - *Needs verification*
+- ⚠️ `error.ts` `head()` output updates `document.head` during client-side recovery - _Needs verification_
 - ✅ Full reload fallback when no boundary exists - `tests/e2e/smoke.spec.ts`
 
 #### Security Tests
+
 - ✅ `.server.ts` imports into browser-reachable modules fail the build - `tests/unit/build.test.ts`
 - ✅ Server-only modules never appear in emitted browser bundles - `tests/unit/build.test.ts`
 - ✅ Named `HTMLElement` exports do not leak into server runtime - `tests/unit/build.test.ts`
@@ -275,11 +304,13 @@ src/runtime/client/
 ### Phase 10: Documentation And Example App ⚠️ MOSTLY COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Expanded `readme.md` with installation, commands, and authoring conventions
 - ✅ One runnable example app covering the core conventions
 - ⚠️ A spec-to-implementation checklist for release readiness
 
 **Implementation:**
+
 - ✅ `readme.md` is comprehensive and well-written
 - ✅ Example app at `spec/fixtures/basic-app/src` covers all major features
 - ⚠️ Release checklist exists in `readme.md` but is marked complete - needs v1 verification
@@ -309,6 +340,7 @@ src/runtime/client/
 ### Phase 11: Gaps ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Correct package entrypoints for the published library and CLI
 - ✅ A resolved contract for non-`Response` `action()` returns (v0 is Response-only)
 - ✅ Release-readiness verification through public entrypoints
@@ -316,6 +348,7 @@ src/runtime/client/
 **Implementation:** Package.json correctly configured with exports and bin entry
 
 **Gaps:**
+
 - ✅ None - Phase 11 addressed the original gaps
 
 ---
@@ -323,6 +356,7 @@ src/runtime/client/
 ### Phase 12: Developer Reloading ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ `elemental dev` command for local development
 - ✅ Watch-mode rebuild pipeline
 - ✅ Browser reload channel using WebSocket or SSE
@@ -351,6 +385,7 @@ src/runtime/client/
 ### Phase 13: Universal Deployment Targets ✅ COMPLETE
 
 **Plan Deliverables:**
+
 - ✅ Host-agnostic server runtime core
 - ✅ Node production target using `srvx`
 - ✅ Cloudflare Workers production target using Wrangler
@@ -358,6 +393,7 @@ src/runtime/client/
 - ✅ Target-aware build, validation, and smoke coverage
 
 **Implementation Locations:**
+
 - `src/runtime/server/core.ts` - shared runtime
 - `src/runtime/server/node.ts` - Node adapter
 - `src/runtime/server/worker.ts` - Worker adapter
@@ -387,6 +423,7 @@ src/runtime/client/
 **Issue:** The actual directory structure doesn't match `plan.md` section "Proposed Repository Layout"
 
 **Plan Expected:**
+
 ```
 src/
   cli/
@@ -421,6 +458,7 @@ src/
 ```
 
 **Actual Structure:**
+
 ```
 src/
   cli/
@@ -457,6 +495,7 @@ src/
 **Impact:** Medium - harder to navigate codebase, but functionality is complete
 
 **Recommendations for v1:**
+
 - **Option A (Document):** Update `plan.md` to reflect actual structure and explain consolidation choices
 - **Option B (Refactor):** Split large files like `bootstrap.ts` and `core.ts` to match original plan for better maintainability
 - **Option C (Hybrid):** Keep current structure but add code comments documenting which logical sections correspond to planned modules
@@ -470,27 +509,32 @@ src/
 **Impact:** Low - functionality exists elsewhere
 
 **Recommendation for v1:**
+
 - Document why dedicated responses module was not needed
 - OR create it if response utilities accumulate
 
 ### 3. Test Organization
 
 **Current State:**
+
 - Unit tests: ~2,449 lines
 - E2E tests: ~610 lines
 - Total: ~3,059 lines of test code
 
 **Strengths:**
+
 - Good coverage of core functionality
 - Both unit and E2E tests exist
 - Tests are well-organized by concern
 
 **Gaps:**
+
 - Some Phase 9 test cases not explicitly verified (see Phase 9 section)
 - Deployment fixtures have smoke tests but not integrated into main suite
 - Dev mode edge cases may need more coverage
 
 **Recommendation for v1:**
+
 - Add missing explicit test cases from Phase 9
 - Integrate deployment smoke tests into CI
 - Consider adding performance benchmarks
@@ -500,15 +544,18 @@ src/
 **Current State:** `src/index.ts` exports types and runtime functions
 
 **Strengths:**
+
 - Clean public API surface
 - TypeScript support is good
 
 **Gaps:**
+
 - No explicit versioning strategy documented
 - No deprecation policy for future breaking changes
 - Missing: Type-only exports vs runtime exports documentation
 
 **Recommendation for v1:**
+
 - Document semantic versioning commitment
 - Document public API stability guarantees
 - Consider separating type exports for better tree-shaking
@@ -592,6 +639,7 @@ Based on this gap analysis, here are the actionable items for v1 readiness:
 The Elemental framework implementation is **substantially complete** for v0 scope. All 13 phases from `plan.md` have been implemented with working code, good test coverage, and a comprehensive example app.
 
 **Strengths:**
+
 - ✅ All core features from spec are implemented
 - ✅ Good separation of concerns (server/client/shared)
 - ✅ Comprehensive test coverage (~3,000 lines)
@@ -601,6 +649,7 @@ The Elemental framework implementation is **substantially complete** for v0 scop
 - ✅ Clean public API surface
 
 **Gaps:**
+
 - ⚠️ Code organization differs from plan (consolidated vs split files)
 - ⚠️ Some documentation gaps (API reference, deployment guides)
 - ⚠️ A few explicit test cases from Phase 9 need verification
@@ -609,6 +658,7 @@ The Elemental framework implementation is **substantially complete** for v0 scop
 ### Path to V1
 
 **Option A: Conservative V1 (Recommended)**
+
 - Fix critical items (1-3)
 - Fix high priority items (4-6)
 - Ship v1 with current architecture
@@ -617,6 +667,7 @@ The Elemental framework implementation is **substantially complete** for v0 scop
 **Estimated Effort:** 2-3 days of focused work
 
 **Option B: Comprehensive V1**
+
 - Fix all critical and high priority items
 - Refactor to match original plan structure
 - Add all medium priority improvements
@@ -625,6 +676,7 @@ The Elemental framework implementation is **substantially complete** for v0 scop
 **Estimated Effort:** 1-2 weeks of work
 
 **Option C: Ship Current State as v0.9**
+
 - Fix only critical test gaps
 - Document known issues
 - Get user feedback before v1
@@ -635,6 +687,7 @@ The Elemental framework implementation is **substantially complete** for v0 scop
 ### Recommendation
 
 Ship **Option A (Conservative V1)** because:
+
 1. Core functionality is solid and tested
 2. Code organization differences are acceptable
 3. Can iterate on documentation and tooling post-v1
@@ -650,6 +703,7 @@ The framework is **ready for v1** after addressing the critical and high-priorit
 **Plan Expected:** ~25 TypeScript files across planned structure
 
 **Actual Implementation:** 21 TypeScript files
+
 - `src/build/`: 4 files (vs 7 planned - plugins consolidated)
 - `src/cli/`: 1 file (as planned)
 - `src/dev/`: 1 file (not in original plan, added in Phase 12)

@@ -53,6 +53,7 @@ The implementation consolidates several modules that the plan proposed as separa
 ### 1. Build Plugins (Consolidated)
 
 **Plan Expected:**
+
 ```
 src/build/plugins/
   css.ts
@@ -63,6 +64,7 @@ src/build/plugins/
 **Actual Implementation:**
 
 All plugins are defined as inline functions in `src/build/index.ts`:
+
 - `createBrowserServerBoundaryPlugin()` - Prevents browser code from importing `.server.ts`
 - `createCssModulePlugin()` - Handles CSS imports differently for browser/server
 - `createServerBundleTransformPlugin()` - Strips custom element exports from server bundles
@@ -82,6 +84,7 @@ All plugins are defined as inline functions in `src/build/index.ts`:
 ### 2. Client Runtime (Consolidated)
 
 **Plan Expected:**
+
 ```
 src/runtime/client/
   bootstrap.ts
@@ -94,6 +97,7 @@ src/runtime/client/
 **Actual Implementation:**
 
 `bootstrap.ts` contains all client runtime logic:
+
 - Custom element registration and detection
 - Navigation interception (Navigation API + fallback)
 - Head content management
@@ -115,6 +119,7 @@ src/runtime/client/
 ### 3. Server Runtime (Consolidated)
 
 **Plan Expected:**
+
 ```
 src/runtime/server/
   app.ts
@@ -128,6 +133,7 @@ src/runtime/server/
 **Actual Implementation:**
 
 Server runtime is split into:
+
 - `app.ts` - Public exports only (re-exports from other modules)
 - `core.ts` - Core runtime (routing, partial rendering, errors, request handling)
 - `render-document.ts` - Document and outlet rendering
@@ -269,6 +275,7 @@ File change → Rebuild → Server restart → SSE notification → Browser upda
 ### Shared Core
 
 Both Node and Worker targets use the same:
+
 - Route discovery
 - Browser asset generation
 - Manifest structure
@@ -356,6 +363,7 @@ tests/
 ### When to Split Modules
 
 Consider splitting when:
+
 1. File exceeds 600-800 lines
 2. Clear logical boundaries emerge
 3. Circular dependencies appear
@@ -372,6 +380,7 @@ If these areas grow significantly:
 ### Maintaining Coherence
 
 When splitting modules:
+
 - Keep public API surface in one place
 - Avoid circular dependencies
 - Update this document

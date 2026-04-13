@@ -423,7 +423,7 @@ export default function docsRoute(props: RouteProps) {
     expect(body).not.toContain("<!doctype html>");
     expect(body).not.toContain("<html>");
     expect(body).not.toContain("data-route-outlet");
-    expect(body).not.toContain("class=\"frame\"");
+    expect(body).not.toContain('class="frame"');
   });
 
   it("treats non-Response action returns as server errors", async () => {
