@@ -1,11 +1,15 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { builtinModules } from "node:module";
 import path from "node:path";
-import { build as esbuild, type Plugin } from "esbuild";
+import { build as esbuild } from "esbuild";
 import { discoverRoutes, type DiscoveredRoute } from "./discover.ts";
 import { type BuildManifest, writeManifest } from "./manifest.ts";
-import { stripNamedHTMLElementExportsFromServerModule } from "./oxc.ts";
+import { createCssModulePlugin } from "./plugins/css.ts";
+import {
+  createBrowserServerBoundaryPlugin,
+  createWorkerRuntimeValidationPlugin,
+} from "./plugins/server-boundary.ts";
+import { createServerBundleTransformPlugin } from "./plugins/strip-custom-elements.ts";
 
 export interface BuildOptions {
   appDir?: string;
@@ -28,16 +32,6 @@ export interface BuildResult {
   wranglerConfigFile?: string;
   workerEntryFile?: string;
 }
-
-const workerIncompatibleNodeBuiltins = new Set(
-  builtinModules.flatMap((moduleName) => {
-    const normalizedModuleName = moduleName.startsWith("node:")
-      ? moduleName.slice("node:".length)
-      : moduleName;
-
-    return [normalizedModuleName, `node:${normalizedModuleName}`];
-  }),
-);
 
 export async function buildProject(options: BuildOptions = {}): Promise<BuildResult> {
   const target = options.target;
@@ -479,133 +473,6 @@ function requireEntryOutput(
   }
 
   return outputPath;
-}
-
-function createBrowserServerBoundaryPlugin(): Plugin {
-  return {
-    name: "elemental-browser-server-boundary",
-    setup(build) {
-      build.onResolve({ filter: /(^|\/)(index|error)\.server(\.[cm]?[jt]sx?)?$/ }, (args) => ({
-        errors: [
-          {
-            text: `Browser-reachable module ${args.importer || "<entry>"} must not import server-only module ${args.path}.`,
-          },
-        ],
-      }));
-    },
-  };
-}
-
-function createCssModulePlugin(target: "browser" | "server"): Plugin {
-  const namespace = `elemental-css-${target}`;
-
-  return {
-    name: `elemental-css-${target}`,
-    setup(build) {
-      build.onResolve({ filter: /\.css$/ }, (args) => {
-        const resolvedPath = path.resolve(args.resolveDir, args.path);
-
-        if (path.basename(resolvedPath) === "layout.css") {
-          return {
-            errors: [
-              {
-                text: `layout.css is a global asset and must not be imported directly: ${args.path}`,
-              },
-            ],
-          };
-        }
-
-        return {
-          namespace,
-          path: resolvedPath,
-        };
-      });
-
-      build.onLoad({ filter: /\.css$/, namespace }, async (args) => {
-        const sourceText = await readFile(args.path, "utf8");
-
-        return {
-          contents:
-            target === "browser"
-              ? [
-                  `const sheet = new CSSStyleSheet();`,
-                  `sheet.replaceSync(${JSON.stringify(sourceText)});`,
-                  `export default sheet;`,
-                  "",
-                ].join("\n")
-              : [
-                  `import { cssText } from "elemental";`,
-                  `const stylesheet = cssText(${JSON.stringify(sourceText)});`,
-                  `export default stylesheet;`,
-                  "",
-                ].join("\n"),
-          loader: "js",
-        };
-      });
-    },
-  };
-}
-
-function createServerBundleTransformPlugin(appDir: string): Plugin {
-  return {
-    name: "elemental-server-bundle-transform",
-    setup(build) {
-      build.onLoad({ filter: /\.(ts|tsx)$/ }, async (args) => {
-        if (!isAppRouteOrLayoutModule(args.path, appDir)) {
-          return undefined;
-        }
-
-        const sourceText = await readFile(args.path, "utf8");
-
-        return {
-          contents: stripNamedHTMLElementExportsFromServerModule(args.path, sourceText),
-          loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
-        };
-      });
-    },
-  };
-}
-
-function createWorkerRuntimeValidationPlugin(appDir: string): Plugin {
-  return {
-    name: "elemental-worker-runtime-validation",
-    setup(build) {
-      build.onResolve({ filter: /.*/ }, (args) => {
-        if (args.importer === "" || !isWithinDirectory(args.importer, appDir)) {
-          return undefined;
-        }
-
-        if (!workerIncompatibleNodeBuiltins.has(args.path)) {
-          return undefined;
-        }
-
-        return {
-          errors: [
-            {
-              text: `Worker-reachable server module ${args.importer} must not import Node builtin ${args.path}.`,
-            },
-          ],
-        };
-      });
-    },
-  };
-}
-
-function isAppRouteOrLayoutModule(filePath: string, appDir: string): boolean {
-  const relativePath = path.relative(appDir, filePath);
-  const fileName = path.basename(filePath);
-
-  if (relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
-    return false;
-  }
-
-  return fileName === "index.ts" || fileName === "layout.ts";
-}
-
-function isWithinDirectory(filePath: string, directoryPath: string): boolean {
-  const relativePath = path.relative(directoryPath, filePath);
-
-  return !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
 
 function createServerEntry(options: {

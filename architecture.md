@@ -1,6 +1,6 @@
 # Elemental Architecture
 
-This document describes the actual implementation structure of Elemental v0 and explains how it differs from the original `plan.md` proposal.
+This document describes the actual implementation structure of Elemental v0 after the runtime and build refactor that split the original monolithic modules into smaller build and runtime units.
 
 ## Overview
 
@@ -18,27 +18,40 @@ src/
   cli/
     index.ts                    # CLI entry point
   build/
-    index.ts                    # Main build orchestration + inline plugins
+    index.ts                    # Main build orchestration
     discover.ts                 # Route discovery and validation
     manifest.ts                 # Manifest types and writing
     oxc.ts                      # AST transforms (strip custom elements)
+    plugins/
+      css.ts                    # CSS import handling for browser/server targets
+      server-boundary.ts        # Browser and worker import-boundary enforcement
+      strip-custom-elements.ts  # Server bundle transform for HTMLElement exports
   dev/
     index.ts                    # Development server with HMR
   runtime/
     client/
-      bootstrap.ts              # Client runtime (navigation, head, forms, registration)
+      bootstrap.ts              # Client runtime entrypoint and public helper re-exports
       dev-client.ts             # Development client (SSE, HMR)
       errors.ts                 # Client-side error recovery
+      forms.ts                  # Same-origin form interception helpers
+      head.ts                   # Managed head and stylesheet synchronization
+      navigation.ts             # Client navigation and document replacement flow
+      register-elements.ts      # Custom element detection and registration
     server/
       app.ts                    # Server exports (public API)
-      core.ts                   # Core server runtime (routing, rendering, errors)
+      assets.ts                 # Asset resolution and managed head composition
+      core.ts                   # Core server runtime orchestration
+      errors.ts                 # Server error-boundary rendering
       node.ts                   # Node.js adapter (srvx)
       render-document.ts        # Document and partial rendering
+      render-partial.ts         # Partial payload detection and JSON responses
+      routing.ts                # Route execution and layout composition
       worker.ts                 # Cloudflare Workers adapter
     shared/
       browser-runtime.ts        # Browser runtime constants
       error-boundaries.ts       # Error boundary resolution
       html.ts                   # HTML tagged template and escaping
+      responses.ts              # Shared HTML and text response helpers
       routes.ts                 # Route matching utilities
       types.ts                  # Shared TypeScript types
   types/
@@ -48,9 +61,9 @@ src/
 
 ## Differences from Plan
 
-The implementation consolidates several modules that the plan proposed as separate files. This section explains each difference and the rationale.
+The current structure is closer to the original `plan.md` proposal than the first v0 implementation. The main differences are now about a few extra support modules rather than large consolidations.
 
-### 1. Build Plugins (Consolidated)
+### 1. Build Plugins
 
 **Plan Expected:**
 
@@ -63,7 +76,7 @@ src/build/plugins/
 
 **Actual Implementation:**
 
-All plugins are defined as inline functions in `src/build/index.ts`:
+Build plugins now live in `src/build/plugins/`:
 
 - `createBrowserServerBoundaryPlugin()` - Prevents browser code from importing `.server.ts`
 - `createCssModulePlugin()` - Handles CSS imports differently for browser/server
@@ -72,16 +85,13 @@ All plugins are defined as inline functions in `src/build/index.ts`:
 
 **Rationale:**
 
-- Each plugin is small (10-100 lines)
-- Plugins are only used within the build pipeline
-- Keeping them inline reduces file count without harming maintainability
-- All plugin logic is still well-organized and testable
+- Plugin concerns are isolated and easier to scan during build debugging
+- The build entrypoint now stays focused on orchestration instead of esbuild callback bodies
+- Worker validation remains grouped with server-boundary enforcement because both are build-time import-boundary checks
 
-**Impact:** Low - code is well-organized and easy to find
+**Impact:** Low - improves navigation without changing the build contract
 
-**Future Consideration:** If plugins grow beyond ~100 lines each, split into separate files
-
-### 2. Client Runtime (Consolidated)
+### 2. Client Runtime
 
 **Plan Expected:**
 
@@ -96,27 +106,23 @@ src/runtime/client/
 
 **Actual Implementation:**
 
-`bootstrap.ts` contains all client runtime logic:
+The client runtime is split by responsibility:
 
-- Custom element registration and detection
-- Navigation interception (Navigation API + fallback)
-- Head content management
-- Form enhancement
-- Route payload handling
-- Asset loading
+- `bootstrap.ts` wires startup and exposes the browser runtime API
+- `navigation.ts` owns client transitions, partial payload application, and document fallbacks
+- `head.ts` owns managed `<head>` markers and stylesheet synchronization
+- `forms.ts` owns request shaping for enhanced same-origin forms
+- `register-elements.ts` owns custom element collection and registration
 
 **Rationale:**
 
-- Client runtime is a cohesive system where all parts interact
-- Navigation, head, and forms are tightly coupled (all part of route transitions)
-- Splitting would require many cross-module dependencies
-- Total size (~400 lines) is manageable as a single module
+- The browser runtime still behaves as one cohesive system, but the files now align with the main responsibilities in the plan
+- Test-facing helpers stay reachable through `bootstrap.ts` via re-exports, so the public surface does not change
+- Navigation remains the coordinator, while head/forms/registration stay reusable and smaller
 
-**Impact:** Medium - larger file but logically cohesive
+**Impact:** Medium - easier maintenance and clearer internal ownership
 
-**Future Consideration:** Consider splitting if file exceeds 500-600 lines
-
-### 3. Server Runtime (Consolidated)
+### 3. Server Runtime
 
 **Plan Expected:**
 
@@ -135,24 +141,24 @@ src/runtime/server/
 Server runtime is split into:
 
 - `app.ts` - Public exports only (re-exports from other modules)
-- `core.ts` - Core runtime (routing, partial rendering, errors, request handling)
+- `core.ts` - Request orchestration and top-level request routing
+- `routing.ts` - Route execution, layout composition, and document/partial rendering paths
+- `errors.ts` - Nearest-boundary server error rendering and fallback handling
+- `assets.ts` - Route asset resolution and managed head composition
 - `render-document.ts` - Document and outlet rendering
+- `render-partial.ts` - Router-payload detection and JSON response helpers
 - `node.ts` - Node.js adapter
 - `worker.ts` - Cloudflare Workers adapter
 
 **Rationale:**
 
-- `core.ts` contains the host-agnostic request → response pipeline
-- Routing, errors, and partial rendering are tightly coupled
-- Splitting would create many small modules with circular dependencies
-- Document rendering is separate because it's used by both full and partial flows
-- Adapters are separate because they're deployment-target-specific
+- The host-agnostic request pipeline stays in `core.ts`, but rendering concerns now live in dedicated modules
+- Error rendering, route rendering, and partial-response shaping have distinct contracts and test surfaces
+- Adapters remain deployment-target-specific and unchanged
 
-**Impact:** Medium - `core.ts` is larger (~500 lines) but represents the unified server pipeline
+**Impact:** Medium - request orchestration stays centralized while rendering logic is easier to reason about
 
-**Future Consideration:** If core.ts exceeds 700-800 lines, consider extracting routing or error handling
-
-### 4. Missing Modules
+### 4. Shared Responses Module
 
 **Plan Expected:**
 
@@ -160,17 +166,14 @@ Server runtime is split into:
 
 **Actual Implementation:**
 
-This module was not created. Response utilities are inline where needed.
+`src/runtime/shared/responses.ts` now contains the small shared HTML and plain-text response helpers used by the server runtime.
 
 **Rationale:**
 
-- Very few response helper functions are needed in v0
-- Standard `Response` constructor and static methods (like `Response.redirect`) are sufficient
-- No reusable response patterns accumulated during implementation
+- The helper count is still small, but centralizing them avoids duplicating content-type setup across routing and error paths
+- This also brings the runtime layout closer to the plan without inventing unnecessary abstractions
 
-**Impact:** None - no utility functions were needed
-
-**Future Consideration:** Create if response helpers accumulate in v1+
+**Impact:** Low - mostly organizational, with slightly cleaner server modules
 
 ## Module Organization Principles
 
@@ -205,12 +208,11 @@ Elemental uses esbuild plugins for build-time transforms:
    - Prevents Node.js built-in imports in Worker-reachable code
    - Only runs for Worker target builds
 
-### Why Inline?
+### Why Separate Files?
 
-- Each plugin is self-contained and small
-- No shared state between plugins
-- Easier to understand build pipeline in one file
-- Can still be extracted if they grow
+- The extracted plugin files match the build responsibilities described in the plan
+- The orchestration file now highlights the overall build flow instead of implementation detail
+- Individual plugin behavior is easier to inspect when a build error points at a specific concern
 
 ## Error Handling Architecture
 
