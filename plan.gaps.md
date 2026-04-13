@@ -18,6 +18,12 @@ What remains is mostly follow-up polish rather than release-blocking correctness
 - benchmark coverage and reporting, and
 - optional CI workflow materialization if the repository wants an in-repo GitHub Actions definition.
 
+This branch closes those remaining follow-up items as well:
+
+- the README now includes dev troubleshooting guidance,
+- the repository now includes a built-in benchmark harness via `npm run bench`, and
+- the repository now includes an in-tree GitHub Actions CI workflow.
+
 ---
 
 ## Phase-by-Phase Status
@@ -202,8 +208,8 @@ What remains is mostly follow-up polish rather than release-blocking correctness
 
 **Residual Follow-Up:**
 
-- Dev-mode troubleshooting documentation could still be expanded with a dedicated "common failure modes" section.
-- This is a polish item, not a release blocker.
+- README troubleshooting guidance now exists for watcher failures, port binding issues, reload fallback behavior, and stylesheet hot-swap expectations.
+- Further expansion is optional polish rather than missing documentation.
 
 ---
 
@@ -223,7 +229,7 @@ What remains is mostly follow-up polish rather than release-blocking correctness
 
 **Residual Follow-Up:**
 
-- There is no in-repo GitHub Actions workflow at the time of this review, so "CI pipeline integration" is only implicitly satisfied through `npm test`, not via a committed workflow definition.
+- The repository now includes an in-repo CI workflow under `.github/workflows/ci.yml`.
 
 ---
 
@@ -263,25 +269,17 @@ The earlier gap-analysis claim that deployment smoke coverage was outside the ma
 
 ## Remaining Follow-Up Items
 
-These are the items that still exist after the current re-review. They are not blocking the original v1-readiness bar, but they remain reasonable post-v1 work.
+The remaining items are optional maintenance or future-iteration work rather than missing v1 deliverables.
 
-### Medium Priority Follow-Up
+### Optional Follow-Up
 
-1. **Expand dev troubleshooting docs**
-   - Add concrete guidance for watcher failures, rebuild loops, port binding issues, and browser reload fallback scenarios.
+1. **Expand internal implementation notes where helpful**
 
-2. **Clarify CI expectations**
-   - If the repository wants explicit CI/CD configuration in-tree, add a GitHub Actions workflow or equivalent definition that runs lint, typecheck, and tests.
+- Add more code comments or internal docs only if future maintenance pressure justifies them.
 
-### Low Priority Follow-Up
+2. **Deepen the benchmark suite over time**
 
-3. **Add benchmark coverage**
-   - Build-time benchmarks
-   - SSR/runtime benchmarks
-   - Client-navigation benchmarks
-
-4. **Expand internal implementation notes where helpful**
-   - Add more code comments or internal docs only if future maintenance pressure justifies them.
+- Add more scenarios if future regressions or scaling questions justify them.
 
 ---
 
@@ -306,3 +304,5 @@ The current branch has completed the substantive work that originally prevented 
 By the original critical and high-priority criteria, Elemental is ready for v1.
 
 The remaining work is optional polish rather than missing framework capability or unverified core behavior.
+
+With the benchmark harness, README troubleshooting guidance, and in-repo CI workflow now added, there are no outstanding missing v1-readiness items from the original gap list.

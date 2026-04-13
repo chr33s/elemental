@@ -14,6 +14,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "bench": "node --experimental-strip-types ./bench.ts",
     "build": "node --experimental-strip-types ./src/cli/index.ts build",
     "dev": "node --experimental-strip-types ./src/cli/index.ts dev",
     "format": "oxfmt .",

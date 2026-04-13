@@ -57,6 +57,7 @@ The built-in example app exercises the framework conventions that are already im
 - `npm run build -- --target node`: emit only the Node deployment artifacts
 - `npm run build -- --target worker`: emit only the Worker deployment artifacts and generated Wrangler config
 - `npm run build -- --watch`: rerun the build when framework or app source files change using Node's watcher and built-in TypeScript support
+- `npm run bench`: run the built-in build and runtime benchmark harness against the canonical example app
 - `npm run dev`: run `elemental dev` with rebuilds, server restarts, live reload, layout stylesheet hot swaps, and safe route-subtree rerenders for browser-only updates
 - `npm run start`: start the generated server from `dist/server.js`
 - `npm run test`: run the unit suite and Playwright smoke coverage
@@ -224,6 +225,29 @@ The update modes are:
 - route-subtree rerender for safe browser-side route, layout, `error.ts`, and route-adjacent module edits.
 
 JavaScript HMR in v0 is intentionally framework-aware rather than module-local. Elemental reloads the current route payload, updates managed head content, reloads any new browser chunks, and replaces the current `data-route-outlet` subtree. That preserves the surrounding document shell while still falling back to a full reload when correctness is uncertain.
+
+### Troubleshooting
+
+- `EMFILE` or watcher instability during `npm run dev`: Node's watcher can hit file-descriptor limits or sandbox wrapper behavior in editor-integrated terminals. Re-run the command in a regular shell first, then reduce other watch-heavy processes if the problem persists.
+- `listen EPERM` or port bind failures: confirm the target port is free. In sandboxed environments, local listeners can be blocked even when the app is correct; verify the same command outside the sandbox before treating it as a framework bug.
+- A change triggers a full reload instead of a route rerender: that is expected for server-module edits, route graph changes, runtime changes, custom element definition changes, and other updates that cross an unsafe boundary.
+- Styles do not hot swap the way you expect: only `layout.css` changes take the stylesheet hot-swap path. Other CSS changes are treated conservatively and may trigger a full reload path instead.
+
+## Benchmarks
+
+Elemental includes a lightweight benchmark harness for repeatable local measurements against `spec/fixtures/basic-app/src`.
+
+```bash
+npm run bench
+```
+
+The benchmark currently reports:
+
+- full build time for the canonical example app,
+- steady-state full-document SSR request timings, and
+- steady-state router payload request timings.
+
+Treat the output as a local baseline rather than a universal performance claim. Hardware, filesystem speed, Node version, and process warmup all affect the numbers.
 
 ## API Reference
 
