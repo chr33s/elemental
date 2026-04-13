@@ -1,3 +1,6 @@
+> [!WARNING]  
+> Experimental: API is unstable and not production-ready.
+
 # Elemental
 
 A runtime-SSR meta-framework for native Web Components. One rendering model, one route graph, and one manifest that both the server and browser runtimes consume.
