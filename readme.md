@@ -657,3 +657,36 @@ Use this checklist as the phase-level release gate for v0:
 - Browser-reachable modules cannot import `*.server.ts` files.
 - `error.ts` is browser-only and is excluded from the server bundle.
 - `elemental dev` supports full-page live reload, `layout.css` hot swaps, and safe route-subtree rerenders with automatic fallback to reload when an update crosses an unsafe boundary.
+
+## Versioning And Compatibility
+
+Elemental follows semantic versioning for published releases.
+
+- Patch releases (`x.y.Z`) are reserved for bug fixes, documentation fixes, and internal changes that do not change the documented public API or framework conventions.
+- Minor releases (`x.Y.z`) may add new capabilities, new documented exports, and new conventions in a backwards-compatible way.
+- Major releases (`X.y.z`) may change route-module contracts, build output shape, runtime behavior, or public exports in ways that require application changes.
+
+The public compatibility surface for v0/v1 is:
+
+- documented exports from `elemental`,
+- documented route-module conventions (`index.ts`, `index.server.ts`, `layout.ts`, `layout.css`, `error.server.ts`, `error.ts`),
+- manifest and build artifacts described in this README, and
+- the command-line flows documented under `npm run build`, `npm run dev`, and `npm run start`.
+
+When a change needs a migration path, the deprecation policy is:
+
+- document the replacement in the README and release notes,
+- keep the old behavior for at least one minor release when practical, and
+- remove deprecated behavior only in the next major release unless keeping it would be incorrect or unsafe.
+
+## Upgrade Guidance
+
+Use this checklist when moving between Elemental releases:
+
+1. Read the release notes for changes to route-module contracts, required Node versions, and build output.
+2. Re-run `npm run build`, `npm run typecheck`, and `npm run test` after upgrading.
+3. Verify any custom deployment wiring still matches the generated `dist/` artifacts for your target.
+4. Re-check browser-only modules for accidental `*.server.ts` imports if new validation rules were added.
+5. Review `error.server.ts`, `error.ts`, and `head()` behavior if the release mentions routing or recovery changes.
+
+For the initial v0 to v1 line, the intended upgrade expectation is no authoring-model reset: the existing route, layout, loader, action, and recovery conventions remain the baseline contract.
