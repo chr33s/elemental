@@ -8,19 +8,11 @@ const DIRECT_HTML_RESULT_CONSTRUCTION_ERROR =
 
 type RawTextElement = "style";
 
-/**
- * A trusted HTML value that will bypass escaping when interpolated.
- * Created via the `safeHtml()` function.
- */
 export type SafeHtmlValue = {
   readonly value: string;
   readonly [SAFE_HTML_BRAND]: true;
 };
 
-/**
- * A CSS text value used for server-side CSS module imports.
- * The browser bundle transforms CSS imports to CSSStyleSheet instances.
- */
 export type CssTextValue = {
   readonly raw: string;
   readonly [CSS_TEXT_BRAND]: true;
@@ -28,11 +20,6 @@ export type CssTextValue = {
   valueOf(): string;
 };
 
-/**
- * Values that can be safely interpolated into HTML templates.
- * Arrays are flattened, primitives are coerced to strings,
- * and null/undefined/false are ignored.
- */
 export type HtmlRenderable =
   | CssTextValue
   | HtmlResult
@@ -54,10 +41,6 @@ interface TemplateParserState {
   tagBuffer: string;
 }
 
-/**
- * The result of an `html` tagged template.
- * Cannot be constructed directly - use `html\`...\`` or `safeHtml()`.
- */
 export class HtmlResult {
   readonly [HTML_RESULT_BRAND] = true;
   readonly value: string;
