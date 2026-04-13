@@ -1,0 +1,19 @@
+{
+  "name": "elemental-spec-fixtures-deploy-wrangler",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --experimental-strip-types ../../../src/cli/index.ts build ../basic-app/src --target worker",
+    "preview:config": "npm run build && node --experimental-strip-types preview-wrangler.ts",
+    "dev": "npm run preview:config && wrangler dev --config ./wrangler.jsonc",
+    "smoke": "npm run build && node --experimental-strip-types smoke.ts",
+    "start": "npm run dev"
+  },
+  "devDependencies": {
+    "wrangler": "^4.81.1"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

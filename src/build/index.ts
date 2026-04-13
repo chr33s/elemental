@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { builtinModules } from "node:module";
 import path from "node:path";
 import { build as esbuild, type Plugin } from "esbuild";
 import { discoverRoutes, type DiscoveredRoute } from "./discover.ts";
@@ -11,7 +12,10 @@ export interface BuildOptions {
   includeDevClient?: boolean;
   outDir?: string;
   rootDir?: string;
+  target?: BuildTarget;
 }
+
+export type BuildTarget = "node" | "worker";
 
 export interface BuildResult {
   clientFile: string;
@@ -20,9 +24,23 @@ export interface BuildResult {
   outDir: string;
   routes: Awaited<ReturnType<typeof discoverRoutes>>;
   serverFile: string;
+  srvxEntryFile?: string;
+  wranglerConfigFile?: string;
+  workerEntryFile?: string;
 }
 
+const workerIncompatibleNodeBuiltins = new Set(
+  builtinModules.flatMap((moduleName) => {
+    const normalizedModuleName = moduleName.startsWith("node:")
+      ? moduleName.slice("node:".length)
+      : moduleName;
+
+    return [normalizedModuleName, `node:${normalizedModuleName}`];
+  }),
+);
+
 export async function buildProject(options: BuildOptions = {}): Promise<BuildResult> {
+  const target = options.target;
   const rootDir = path.resolve(options.rootDir ?? process.cwd());
   const appDir = path.resolve(rootDir, options.appDir ?? "spec/fixtures/basic-app/src");
   const outDir = path.resolve(rootDir, options.outDir ?? "dist");
@@ -33,6 +51,7 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
   const clientBootstrapPath = path.join(rootDir, "src/runtime/client/bootstrap.ts");
   const devClientPath = path.join(rootDir, "src/runtime/client/dev-client.ts");
   const serverAppPath = path.join(rootDir, "src/runtime/server/app.ts");
+  const workerServerPath = path.join(rootDir, "src/runtime/server/worker.ts");
 
   await mkdir(assetsDir, { recursive: true });
   await mkdir(serverModulesDir, { recursive: true });
@@ -165,6 +184,72 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     write: true,
   });
 
+  const shouldBuildNodeTarget = target !== "worker";
+  const shouldBuildWorkerTarget = target !== "node";
+  const srvxEntryFile = shouldBuildNodeTarget ? path.join(outDir, "srvx.js") : undefined;
+
+  if (srvxEntryFile !== undefined) {
+    await esbuild({
+      absWorkingDir: rootDir,
+      bundle: true,
+      format: "esm",
+      outfile: srvxEntryFile,
+      platform: "node",
+      sourcemap: true,
+      stdin: {
+        contents: createSrvxEntry({
+          distDir: outDir,
+          manifest,
+          serverAppPath,
+        }),
+        resolveDir: rootDir,
+        sourcefile: "virtual-srvx-entry.ts",
+      },
+      target: ["node24"],
+      write: true,
+    });
+  }
+
+  const workerEntryFile = shouldBuildWorkerTarget ? path.join(outDir, "worker.js") : undefined;
+
+  if (workerEntryFile !== undefined) {
+    const serverModuleIds = createServerModuleIdMap(collectServerModulePaths(routes), rootDir);
+
+    await esbuild({
+      absWorkingDir: rootDir,
+      alias: {
+        elemental: packageEntryPath,
+      },
+      bundle: true,
+      format: "esm",
+      outfile: workerEntryFile,
+      platform: "browser",
+      plugins: [
+        createCssModulePlugin("server"),
+        createServerBundleTransformPlugin(appDir),
+        createWorkerRuntimeValidationPlugin(appDir),
+      ],
+      sourcemap: true,
+      stdin: {
+        contents: createWorkerEntry({
+          manifest: createWorkerManifest(manifest, routes, rootDir, serverModuleIds),
+          moduleIdByFilePath: serverModuleIds,
+          modulePaths: collectServerModulePaths(routes),
+          workerServerPath,
+        }),
+        resolveDir: rootDir,
+        sourcefile: "virtual-worker-entry.ts",
+      },
+      target: ["es2024"],
+      write: true,
+    });
+  }
+
+  const wranglerConfigFile =
+    workerEntryFile === undefined
+      ? undefined
+      : await writeWranglerConfig(outDir, manifest.generatedAt);
+
   return {
     clientFile,
     devClientFile,
@@ -172,6 +257,9 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     outDir,
     routes,
     serverFile,
+    srvxEntryFile,
+    wranglerConfigFile,
+    workerEntryFile,
   };
 }
 
@@ -478,6 +566,31 @@ function createServerBundleTransformPlugin(appDir: string): Plugin {
   };
 }
 
+function createWorkerRuntimeValidationPlugin(appDir: string): Plugin {
+  return {
+    name: "elemental-worker-runtime-validation",
+    setup(build) {
+      build.onResolve({ filter: /.*/ }, (args) => {
+        if (args.importer === "" || !isWithinDirectory(args.importer, appDir)) {
+          return undefined;
+        }
+
+        if (!workerIncompatibleNodeBuiltins.has(args.path)) {
+          return undefined;
+        }
+
+        return {
+          errors: [
+            {
+              text: `Worker-reachable server module ${args.importer} must not import Node builtin ${args.path}.`,
+            },
+          ],
+        };
+      });
+    },
+  };
+}
+
 function isAppRouteOrLayoutModule(filePath: string, appDir: string): boolean {
   const relativePath = path.relative(appDir, filePath);
   const fileName = path.basename(filePath);
@@ -487,6 +600,12 @@ function isAppRouteOrLayoutModule(filePath: string, appDir: string): boolean {
   }
 
   return fileName === "index.ts" || fileName === "layout.ts";
+}
+
+function isWithinDirectory(filePath: string, directoryPath: string): boolean {
+  const relativePath = path.relative(directoryPath, filePath);
+
+  return !relativePath.startsWith("..") && !path.isAbsolute(relativePath);
 }
 
 function createServerEntry(options: {
@@ -503,6 +622,142 @@ function createServerEntry(options: {
     "});",
     "",
   ].join("\n");
+}
+
+function createSrvxEntry(options: {
+  distDir: string;
+  manifest: BuildManifest;
+  serverAppPath: string;
+}): string {
+  return [
+    `import { createSrvxHandler } from ${JSON.stringify(options.serverAppPath)};`,
+    "",
+    "export default createSrvxHandler({",
+    `  distDir: ${JSON.stringify(options.distDir)},`,
+    `  manifest: ${JSON.stringify(options.manifest, null, 2)},`,
+    "});",
+    "",
+  ].join("\n");
+}
+
+function createWorkerEntry(options: {
+  manifest: BuildManifest;
+  moduleIdByFilePath: Map<string, string>;
+  modulePaths: string[];
+  workerServerPath: string;
+}): string {
+  const importLines = [
+    `import { createWorkerHandler } from ${JSON.stringify(options.workerServerPath)};`,
+  ];
+  const registryEntries: string[] = [];
+
+  options.modulePaths.forEach((modulePath, index) => {
+    const variableName = `serverModule${index}`;
+    const moduleId = options.moduleIdByFilePath.get(path.resolve(modulePath));
+
+    if (moduleId === undefined) {
+      throw new Error(`Missing worker module id for ${modulePath}`);
+    }
+
+    importLines.push(
+      `import * as ${variableName} from ${JSON.stringify(path.resolve(modulePath))};`,
+    );
+    registryEntries.push(`  ${JSON.stringify(moduleId)}: ${variableName},`);
+  });
+
+  return [
+    ...importLines,
+    "",
+    "export default createWorkerHandler({",
+    `  manifest: ${JSON.stringify(options.manifest, null, 2)},`,
+    "  modules: {",
+    ...registryEntries,
+    "  },",
+    "});",
+    "",
+  ].join("\n");
+}
+
+function createWorkerManifest(
+  manifest: BuildManifest,
+  routes: DiscoveredRoute[],
+  rootDir: string,
+  moduleIdByFilePath: Map<string, string>,
+): BuildManifest {
+  return {
+    ...manifest,
+    routes: manifest.routes.map((route, index) => {
+      const discoveredRoute = routes[index];
+
+      return {
+        ...route,
+        server: {
+          layouts: discoveredRoute.layouts.map((filePath) =>
+            requireServerModuleId(moduleIdByFilePath, filePath, rootDir),
+          ),
+          route: requireServerModuleId(moduleIdByFilePath, discoveredRoute.filePath, rootDir),
+          routeServer:
+            discoveredRoute.serverFilePath === undefined
+              ? undefined
+              : requireServerModuleId(moduleIdByFilePath, discoveredRoute.serverFilePath, rootDir),
+          serverErrorBoundaries: discoveredRoute.serverErrorBoundaries.map((filePath) =>
+            requireServerModuleId(moduleIdByFilePath, filePath, rootDir),
+          ),
+        },
+      };
+    }),
+  };
+}
+
+function createServerModuleIdMap(filePaths: string[], rootDir: string): Map<string, string> {
+  return new Map(
+    filePaths.map((filePath) => [path.resolve(filePath), createServerModuleId(filePath, rootDir)]),
+  );
+}
+
+function createServerModuleId(filePath: string, rootDir: string): string {
+  return `server:${toPosixPath(path.relative(rootDir, filePath))}`;
+}
+
+function requireServerModuleId(
+  moduleIdByFilePath: Map<string, string>,
+  filePath: string,
+  rootDir: string,
+): string {
+  const moduleId = moduleIdByFilePath.get(path.resolve(filePath));
+
+  if (moduleId === undefined) {
+    throw new Error(
+      `Missing server module id for ${toPosixPath(path.relative(rootDir, filePath))}`,
+    );
+  }
+
+  return moduleId;
+}
+
+async function writeWranglerConfig(outDir: string, generatedAt: string): Promise<string> {
+  const wranglerConfigFile = path.join(outDir, "wrangler.jsonc");
+  const compatibilityDate = generatedAt.slice(0, 10);
+
+  await writeFile(
+    wranglerConfigFile,
+    [
+      "{",
+      '  "name": "elemental-worker",',
+      '  "main": "./worker.js",',
+      `  "compatibility_date": ${JSON.stringify(compatibilityDate)},`,
+      '  "assets": {',
+      '    "directory": ".",',
+      '    "binding": "ASSETS",',
+      '    "run_worker_first": true',
+      "  }",
+      "}",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  return wranglerConfigFile;
 }
 
 function toPosixPath(value: string): string {

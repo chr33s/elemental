@@ -1,10 +1,13 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, type ChildProcessByStdio } from "node:child_process";
 import { once } from "node:events";
 import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import path from "node:path";
+import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+
+type DevChildProcess = ChildProcessByStdio<null, Readable, Readable>;
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 const fixtureAppDir = path.join(rootDir, "spec/fixtures/basic-app/src");
@@ -152,7 +155,7 @@ test("falls back to a full reload for server-module changes", async ({ page }) =
 });
 
 async function startDevWorkspace(): Promise<{
-  childProcess: ChildProcessWithoutNullStreams;
+  childProcess: DevChildProcess;
   cleanup: () => Promise<void>;
   url: string;
   workspaceDir: string;
@@ -209,7 +212,7 @@ async function startDevWorkspace(): Promise<{
 }
 
 async function waitForDevServerReady(
-  childProcess: ChildProcessWithoutNullStreams,
+  childProcess: DevChildProcess,
   port: number,
   getOutput: () => string,
 ): Promise<void> {
@@ -254,7 +257,7 @@ async function replaceInFile(filePath: string, oldText: string, newText: string)
   await writeFile(filePath, sourceText.replace(oldText, newText), "utf8");
 }
 
-async function waitForDevClientReady(page: Parameters<typeof test>[0]["page"]): Promise<void> {
+async function waitForDevClientReady(page: Page): Promise<void> {
   await expect
     .poll(
       () =>

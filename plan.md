@@ -500,6 +500,56 @@ Acceptance criteria:
 - The development workflow uses the same route graph, manifest generation, and output structure as the production build pipeline.
 - The README and plan explicitly describe live reload, CSS hot reload, and JavaScript HMR as in-scope parts of `elemental dev`, including the fallback rules that protect correctness.
 
+## Phase 13: Universal Deployment Targets
+
+Deliverables:
+
+- Host-agnostic server runtime core shared by all production deployment targets.
+- Node production target using `srvx` while preserving the existing `dist/server.js` baseline output.
+- Cloudflare Workers production target using Wrangler with generated Worker entrypoint and asset bindings.
+- Shared server-module resolution strategy that supports filesystem-backed Node execution and Worker-safe bundled or registry-backed execution.
+- Target-aware build, validation, and smoke coverage for both deployment targets.
+
+Tasks:
+
+- Split the server runtime into a host-agnostic `Request` -> `Response` core plus thin host adapters for Node and Workers so the SSR pipeline, router payload rendering, and error handling remain shared.
+- Introduce explicit server runtime interfaces for asset access, server-module resolution, logging, and host capabilities instead of coupling the runtime directly to `node:http`, filesystem reads, and path-based dynamic imports.
+- Preserve the current Node.js production contract by continuing to emit `dist/server.js`, but route that output through a `srvx`-based adapter instead of a hand-rolled production listener.
+- Add a Worker build target that emits `dist/worker.js` and any generated registry artifacts while continuing to emit browser assets into `dist/assets/*`.
+- Replace manifest server references that currently assume output file paths with logical server-module identifiers so Node and Worker targets can resolve the same route graph through different runtime adapters.
+- Generate a server-module registry that maps logical module identifiers to emitted server files for Node and to bundled or statically imported modules for the Worker target.
+- Keep one route graph and manifest pipeline for both targets so route matching, layout ancestry, error boundary resolution, head composition, and browser asset metadata remain identical.
+- Add a Node adapter that serves generated assets and resolves server modules from the filesystem while delegating incoming requests through the shared runtime core.
+- Add a Worker adapter that handles application requests through the shared runtime core and delegates hashed asset requests to `env.ASSETS.fetch(request)`.
+- Remove Worker-path filesystem reads for manifest and asset lookup by bundling required runtime metadata into the generated Worker entry or adjacent generated registry modules.
+- Configure Wrangler custom builds so `wrangler dev` and `wrangler deploy` run the Elemental build before Wrangler bundles the generated Worker entry.
+- Define a Wrangler configuration strategy that points `assets.directory` at generated output, binds `ASSETS`, and uses Worker-first routing for SSR requests with static asset fallback for browser files.
+- Add target-aware build options so the CLI can emit `node` or `worker` outputs explicitly, and emit both deployment targets when no explicit target is supplied, without duplicating route discovery or browser asset generation.
+- Add validation that fails Worker-reachable server code when it relies on unsupported Node-only APIs, while still allowing the Node target to use its broader runtime surface when explicitly targeted.
+- Add parity coverage for Node and Worker targets across full-document SSR, partial router payloads, action handling, loader short-circuits, redirects, nearest server error boundaries, and generated asset delivery.
+- Add packaging smoke checks that confirm the Node target starts under `srvx` and the Worker target packages and runs under `wrangler dev` and dry-run deployment.
+- Keep deployment wrapper fixtures under `spec/fixtures/` so Node and Worker packaging can target the same canonical app without maintaining duplicate example sources.
+
+Acceptance criteria:
+
+- `elemental build` can emit both `dist/server.js` for the Node target and `dist/worker.js` for the Worker target from the same discovered route graph, while `--target node` and `--target worker` remain available for explicit single-target builds.
+- The Node target can execute through `srvx` without changing route, loader, action, layout, head, or error-boundary semantics from the current baseline.
+- `wrangler dev` can run the Worker target against generated `dist` artifacts after the configured custom build completes.
+- Full document SSR, partial router payloads, action handling, loader short-circuits, redirects, and server error boundary resolution behave the same across the Node and Worker targets for shared app code.
+- Worker requests do not rely on runtime filesystem reads or path-based dynamic imports for manifest or server module resolution.
+- Generated hashed assets are served correctly in both deployment targets and remain referenced consistently by the shared manifest and router payloads.
+- Target-specific validation catches unsupported Worker runtime patterns before deployment instead of deferring failures to production.
+- Node startup through `srvx` and Worker packaging through Wrangler can both be validated in automated smoke coverage.
+- `spec/fixtures/` includes thin deployment wrappers for `srvx` and Wrangler around the canonical app fixture instead of separate duplicated examples.
+
+References:
+
+- https://github.com/h3js/srvx
+- https://github.com/cloudflare/workers-sdk/tree/main/packages/wrangler
+- https://developers.cloudflare.com/workers/wrangler/bundling/
+- https://developers.cloudflare.com/workers/wrangler/custom-builds/
+- https://developers.cloudflare.com/workers/static-assets/
+
 ## Cross-Cutting Rules
 
 These rules should be enforced throughout the implementation:

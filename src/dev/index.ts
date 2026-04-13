@@ -265,6 +265,7 @@ async function buildArtifacts(options: {
     includeDevClient: true,
     outDir: options.outDir,
     rootDir: options.rootDir,
+    target: "node",
   });
 
   if (result.devClientFile === undefined) {

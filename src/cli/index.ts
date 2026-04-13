@@ -8,11 +8,14 @@ import { parseArgs } from "node:util";
 import { buildProject } from "../build/index.ts";
 import { startDevServer } from "../dev/index.ts";
 
+const supportedBuildTargets = new Set(["node", "worker"]);
+
 async function main(): Promise<void> {
   const options = parseArgs({
     allowPositionals: true,
     args: process.argv.slice(2),
     options: {
+      target: { type: "string" },
       watch: { type: "boolean" },
       port: { type: "string" },
     },
@@ -22,6 +25,7 @@ async function main(): Promise<void> {
   const currentWorkingDirectory = process.cwd();
   const packageRoot = await resolvePackageRoot();
   const [command = "build", appRoot, ...commandArgs] = options.positionals;
+  const buildTarget = normalizeBuildTarget(options.values.target);
 
   switch (command) {
     case "build": {
@@ -33,6 +37,7 @@ async function main(): Promise<void> {
           command,
           commandArgs,
           packageRoot,
+          target: buildTarget,
         });
 
         return;
@@ -42,6 +47,7 @@ async function main(): Promise<void> {
         appDir,
         outDir: path.join(currentWorkingDirectory, "dist"),
         rootDir: packageRoot,
+        target: buildTarget,
       });
       const relativeOutDir = path.relative(process.cwd(), result.outDir) || result.outDir;
 
@@ -85,6 +91,7 @@ async function startWatchMode(options: {
   command: string;
   commandArgs: string[];
   packageRoot: string;
+  target?: "node" | "worker";
 }): Promise<void> {
   const scriptPath = fileURLToPath(import.meta.url);
   const frameworkSrcDir = path.join(options.packageRoot, "src");
@@ -95,9 +102,22 @@ async function startWatchMode(options: {
     scriptPath,
     options.command,
     ...options.commandArgs,
+    ...(options.target === undefined ? [] : ["--target", options.target]),
   ];
 
   await runWatchProcess(nodeArgs);
+}
+
+function normalizeBuildTarget(value: unknown): "node" | "worker" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value !== "string" || !supportedBuildTargets.has(value)) {
+    throw new Error('Elemental build target must be one of: "node", "worker".');
+  }
+
+  return value as "node" | "worker";
 }
 
 async function collectWatchPaths(candidatePaths: string[]): Promise<string[]> {

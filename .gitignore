@@ -4,3 +4,4 @@ playwright-report
 spec/fixtures/**/package-lock.json
 test-results
 .tmp*/
+**/.wrangler/*

@@ -24,6 +24,19 @@ The repository currently builds the example app in `spec/fixtures/basic-app/src`
 - `dist/server.js`
 - `dist/assets/*`
 - `dist/manifest.json`
+- `dist/srvx.js`
+- `dist/worker.js`
+- `dist/wrangler.jsonc`
+
+## Deployment Fixtures
+
+`spec/fixtures/basic-app/src` remains the canonical app fixture. Deployment-specific wrappers live beside it so Node and Worker packaging can be exercised without copying route code:
+
+- `spec/fixtures/deploy-srvx`: builds the shared app with `--target node` and emits `dist/srvx.js`
+- `spec/fixtures/deploy-wrangler`: builds the shared app with `--target worker` and emits `dist/worker.js` plus `dist/wrangler.jsonc`
+
+From either fixture directory, `npm run build` writes artifacts into that fixture's local `dist/` directory.
+Each wrapper also exposes `npm run smoke` to validate the generated runtime artifact without installing `srvx` or Wrangler into the repo.
 
 ## Example App Tour
 
@@ -40,7 +53,9 @@ The built-in example app exercises the framework conventions that are already im
 
 ## Commands
 
-- `npm run build`: bundle the framework plus the default example app into `dist/`
+- `npm run build`: bundle the framework plus the default example app into `dist/`, including both Node and Worker deployment artifacts
+- `npm run build -- --target node`: emit only the Node deployment artifacts
+- `npm run build -- --target worker`: emit only the Worker deployment artifacts and generated Wrangler config
 - `npm run build -- --watch`: rerun the build when framework or app source files change using Node's watcher and built-in TypeScript support
 - `npm run dev`: run `elemental dev` with rebuilds, server restarts, live reload, layout stylesheet hot swaps, and safe route-subtree rerenders for browser-only updates
 - `npm run start`: start the generated server from `dist/server.js`

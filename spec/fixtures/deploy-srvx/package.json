@@ -1,0 +1,18 @@
+{
+  "name": "elemental-spec-fixtures-deploy-srvx",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node --experimental-strip-types ../../../src/cli/index.ts build ../basic-app/src --target node",
+    "dev": "npm run build && srvx serve --entry ./dist/srvx.js",
+    "smoke": "npm run build && node --experimental-strip-types smoke.ts",
+    "start": "npm run build && srvx serve --entry ./dist/srvx.js --prod"
+  },
+  "devDependencies": {
+    "srvx": "^0.11.15"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}
