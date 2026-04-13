@@ -8,12 +8,14 @@ import { stripNamedHTMLElementExportsFromServerModule } from "./oxc.ts";
 
 export interface BuildOptions {
   appDir?: string;
+  includeDevClient?: boolean;
   outDir?: string;
   rootDir?: string;
 }
 
 export interface BuildResult {
   clientFile: string;
+  devClientFile?: string;
   manifestPath: string;
   outDir: string;
   routes: Awaited<ReturnType<typeof discoverRoutes>>;
@@ -29,6 +31,7 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
   const packageEntryPath = path.join(rootDir, "src/index.ts");
   const cliEntryPath = path.join(rootDir, "src/cli/index.ts");
   const clientBootstrapPath = path.join(rootDir, "src/runtime/client/bootstrap.ts");
+  const devClientPath = path.join(rootDir, "src/runtime/client/dev-client.ts");
   const serverAppPath = path.join(rootDir, "src/runtime/server/app.ts");
 
   await mkdir(assetsDir, { recursive: true });
@@ -49,7 +52,11 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     outDir,
   );
   const browserEntryPoints = createEntryPointMap(
-    [clientBootstrapPath, ...collectBrowserModulePaths(routes)],
+    [
+      clientBootstrapPath,
+      ...(options.includeDevClient === true ? [devClientPath] : []),
+      ...collectBrowserModulePaths(routes),
+    ],
     rootDir,
   );
 
@@ -80,6 +87,13 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     "client bootstrap",
   );
   const clientFile = path.join(outDir, clientAssetRelativePath);
+  const devClientFile =
+    options.includeDevClient === true
+      ? path.join(
+          outDir,
+          requireEntryOutput(browserOutputs, devClientPath, "development client bootstrap"),
+        )
+      : undefined;
 
   const serverEntryPoints = createEntryPointMap(collectServerModulePaths(routes), rootDir);
   const serverModuleBuild = await esbuild({
@@ -153,6 +167,7 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
 
   return {
     clientFile,
+    devClientFile,
     manifestPath,
     outDir,
     routes,
@@ -261,6 +276,7 @@ async function buildPackageEntrypoints(
   await esbuild({
     bundle: true,
     entryPoints: [cliEntryPath],
+    external: ["@oxc-parser/*", "esbuild", "node:*", "oxc-parser"],
     format: "esm",
     outfile: path.join(outDir, "cli.js"),
     packages: "external",

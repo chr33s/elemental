@@ -6,65 +6,78 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { buildProject } from "../build/index.ts";
+import { startDevServer } from "../dev/index.ts";
 
 async function main(): Promise<void> {
-  const [command = "build", ...args] = process.argv.slice(2);
-
-  if (command !== "build") {
-    throw new Error(`Unknown Elemental command: ${command}`);
-  }
-
-  const currentWorkingDirectory = process.cwd();
-  const packageRoot = await resolvePackageRoot();
-  const buildOptions = parseBuildArgs(args);
-  const appDir = resolveAppDir(currentWorkingDirectory, buildOptions.appArg);
-
-  if (buildOptions.watch) {
-    await startWatchMode({
-      appDir,
-      command,
-      commandArgs: buildOptions.forwardedArgs,
-      packageRoot,
-    });
-
-    return;
-  }
-
-  const result = await buildProject({
-    appDir,
-    outDir: path.join(currentWorkingDirectory, "dist"),
-    rootDir: packageRoot,
-  });
-  const relativeOutDir = path.relative(process.cwd(), result.outDir) || result.outDir;
-
-  console.log(`Built ${result.routes.length} route(s) into ${relativeOutDir}`);
-}
-
-function parseBuildArgs(args: string[]): {
-  appArg?: string;
-  forwardedArgs: string[];
-  watch: boolean;
-} {
-  const parsedArgs = parseArgs({
+  const options = parseArgs({
     allowPositionals: true,
-    args,
+    args: process.argv.slice(2),
     options: {
-      watch: {
-        type: "boolean",
-      },
+      watch: { type: "boolean" },
+      port: { type: "string" },
     },
     strict: false,
   });
 
-  return {
-    appArg: parsedArgs.positionals[0],
-    forwardedArgs: args.filter((arg) => arg !== "--watch"),
-    watch: parsedArgs.values.watch === true,
-  };
+  const currentWorkingDirectory = process.cwd();
+  const packageRoot = await resolvePackageRoot();
+  const [command = "build", appRoot, ...commandArgs] = options.positionals;
+
+  switch (command) {
+    case "build": {
+      const appDir = resolveAppDir(currentWorkingDirectory, packageRoot, appRoot);
+
+      if (options.values.watch) {
+        await startWatchMode({
+          appDir,
+          command,
+          commandArgs,
+          packageRoot,
+        });
+
+        return;
+      }
+
+      const result = await buildProject({
+        appDir,
+        outDir: path.join(currentWorkingDirectory, "dist"),
+        rootDir: packageRoot,
+      });
+      const relativeOutDir = path.relative(process.cwd(), result.outDir) || result.outDir;
+
+      console.log(`Built ${result.routes.length} route(s) into ${relativeOutDir}`);
+      return;
+    }
+    case "dev": {
+      await startDevServer({
+        appDir: resolveAppDir(currentWorkingDirectory, packageRoot, appRoot),
+        outDir: path.join(currentWorkingDirectory, "dist"),
+        port: options.values.port ? Number.parseInt(options.values.port as string) : undefined,
+        rootDir: packageRoot,
+      });
+
+      return;
+    }
+
+    default:
+      throw new Error(`Unknown Elemental command: ${command}`) as never;
+  }
 }
 
-function resolveAppDir(currentWorkingDirectory: string, appArg?: string): string {
-  return path.resolve(currentWorkingDirectory, appArg ?? "src");
+function resolveAppDir(
+  currentWorkingDirectory: string,
+  packageRoot: string,
+  appArg?: string,
+): string {
+  if (appArg !== undefined) {
+    return path.resolve(currentWorkingDirectory, appArg);
+  }
+
+  if (path.resolve(currentWorkingDirectory) === path.resolve(packageRoot)) {
+    return path.join(packageRoot, "spec/fixtures/basic-app/src");
+  }
+
+  return path.resolve(currentWorkingDirectory, "src");
 }
 
 async function startWatchMode(options: {

@@ -45,6 +45,12 @@ interface BootstrapState {
   manifest: BuildManifest;
 }
 
+export interface ElementalBrowserRuntimeApi {
+  refreshCurrentRoute(): Promise<void>;
+  replaceManifest(manifest: BuildManifest): void;
+  syncCurrentRouteStylesheets(): Promise<void>;
+}
+
 const ROUTER_HEADER_NAME = "X-Elemental-Router";
 
 export function collectCustomElementDefinitions(
@@ -104,6 +110,7 @@ async function bootstrap(): Promise<void> {
 
   await primeCurrentRoute(state);
   installNavigationInterceptors(state);
+  installBrowserRuntimeApi(state);
   document.documentElement.dataset.elemental = "ready";
 }
 
@@ -129,6 +136,60 @@ async function primeCurrentRoute(state: BootstrapState): Promise<void> {
   }
 
   await loadScriptModules(state, getRouteScriptAssets(state.currentRoute.route));
+}
+
+function installBrowserRuntimeApi(state: BootstrapState): void {
+  (
+    window as Window & {
+      __elementalBrowserRuntime?: ElementalBrowserRuntimeApi;
+    }
+  ).__elementalBrowserRuntime = {
+    refreshCurrentRoute: () => refreshCurrentRoute(state),
+    replaceManifest: (manifest) => {
+      state.manifest = manifest;
+      state.currentRoute = matchManifestRoute(window.location.pathname, state.manifest.routes);
+    },
+    syncCurrentRouteStylesheets: () => syncCurrentRouteStylesheets(state),
+  };
+}
+
+async function refreshCurrentRoute(state: BootstrapState): Promise<void> {
+  const currentUrl = new URL(window.location.href);
+  const response = await fetch(currentUrl, {
+    cache: "no-store",
+    headers: {
+      [ROUTER_HEADER_NAME]: "true",
+    },
+  });
+
+  if (!isRouterPayloadResponse(response)) {
+    fallbackToDocumentNavigation(currentUrl, true);
+    return;
+  }
+
+  await applyNavigationPayload(
+    state,
+    currentUrl,
+    response,
+    "none",
+    matchManifestRoute(currentUrl.pathname, state.manifest.routes),
+  );
+}
+
+async function syncCurrentRouteStylesheets(state: BootstrapState): Promise<void> {
+  const matchedRoute = matchManifestRoute(window.location.pathname, state.manifest.routes);
+
+  if (matchedRoute === undefined) {
+    fallbackToDocumentNavigation(new URL(window.location.href), true);
+    return;
+  }
+
+  const removeObsoleteStylesheets = await syncManagedStylesheets(
+    getRouteStylesheetAssets(matchedRoute.route),
+  );
+
+  removeObsoleteStylesheets();
+  state.currentRoute = matchedRoute;
 }
 
 function installNavigationInterceptors(state: BootstrapState): void {
@@ -464,6 +525,12 @@ async function loadScriptModules(state: BootstrapState, scriptHrefs: string[]): 
 
 function getRouteScriptAssets(route: MatchedManifestRoute["route"]): string[] {
   return route.assets.js ?? route.assets.scripts ?? [];
+}
+
+function getRouteStylesheetAssets(route: MatchedManifestRoute["route"]): string[] {
+  return (route.assets.css ?? route.assets.layoutCss ?? []).map((assetPath) =>
+    normalizeAssetHref(assetPath),
+  );
 }
 
 function registerCustomElements(moduleNamespace: BrowserModuleNamespace): void {

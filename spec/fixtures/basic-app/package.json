@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "elemental build",
+    "dev": "elemental dev",
     "start": "node dist/server.js"
   },
   "dependencies": {

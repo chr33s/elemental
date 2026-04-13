@@ -462,6 +462,44 @@ Acceptance criteria:
 - The release checklist no longer contains open-ended completion blockers for v0.
 - The plan, runtime behavior, README, and spec agree on the v0 `Response`-only `action()` contract.
 
+## Phase 12: Developer Reloading
+
+Deliverables:
+
+- `elemental dev` command for local development.
+- Watch-mode rebuild pipeline for browser assets, server output, and manifest updates.
+- Browser reload channel using WebSocket or SSE for development notifications.
+- Full-page live reload path for updates that cannot be applied safely in place.
+- CSS-only hot swap for emitted stylesheet assets when the change can be handled without a full reload.
+- Framework-aware JavaScript HMR for browser route, layout, and error modules, with explicit fallback to live reload when an update crosses an unsafe boundary.
+- Coordinated server-module restart and invalidation behavior for `index.server.ts`, manifest changes, and other SSR-affecting updates.
+
+Tasks:
+
+- Add an `elemental dev` entrypoint that wraps the existing `esbuild` pipeline in watch mode instead of treating development as manual rebuilds.
+- Keep the development flow centered on the existing `dist/server.js`, `dist/assets/*`, and `dist/manifest.json` outputs so dev mode exercises the same artifacts as production builds.
+- Add a small development transport layer that notifies connected browsers when a rebuild finishes.
+- Implement full-page live reload as the fallback response when a change cannot be handled safely through CSS or JavaScript hot updates.
+- Restart or refresh the running server process when server output changes, and only notify the browser after the new build artifacts are ready.
+- Detect CSS-only changes, especially `layout.css` and other emitted stylesheet assets, and replace the affected stylesheet references in the browser without forcing a full page reload.
+- Define HMR invalidation boundaries for `index.ts`, `layout.ts`, `error.ts`, shared browser runtime modules, and route-adjacent dependencies so the framework can decide between in-place update, subtree rerender, or full reload.
+- Implement client-side HMR handlers for route, layout, and browser error modules so browser updates can be accepted without tearing down the entire page when the update remains inside a safe boundary.
+- Define how route-module and layout-module hot updates affect SSR-driven head content, `data-route-outlet`, and any active custom element registrations.
+- Treat `index.server.ts`, route manifest changes, route discovery changes, and other server-side contract changes as restart-plus-notify events that may still require browser reload instead of in-place HMR.
+- Preserve browser state across safe JavaScript hot updates where possible, and fall back to route-subtree rerender or full reload when the framework cannot preserve correctness.
+- Document the staged rollout inside the phase: live reload first, CSS hot reload second, JavaScript HMR third, while keeping all three inside the phase scope.
+- Add end-to-end coverage for dev-mode rebuild notifications, full-page reload fallback, CSS-only hot swap on stylesheet edits, and safe JavaScript HMR behavior for route or layout module changes.
+
+Acceptance criteria:
+
+- `elemental dev` rebuilds the app automatically after file changes without requiring manual restart steps.
+- Browser sessions reload automatically after rebuilds when a change falls outside the supported CSS or JavaScript HMR boundaries.
+- Stylesheet-only edits update in the browser without a full-page reload when the affected asset can be swapped safely.
+- Supported JavaScript changes in route, layout, and browser error modules update in place during development without a full-page reload.
+- Server-contract changes, route graph changes, and unsafe JavaScript updates fall back to restart plus full-page reload instead of leaving the app in a stale or inconsistent state.
+- The development workflow uses the same route graph, manifest generation, and output structure as the production build pipeline.
+- The README and plan explicitly describe live reload, CSS hot reload, and JavaScript HMR as in-scope parts of `elemental dev`, including the fallback rules that protect correctness.
+
 ## Cross-Cutting Rules
 
 These rules should be enforced throughout the implementation:

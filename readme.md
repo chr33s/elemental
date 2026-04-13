@@ -42,6 +42,7 @@ The built-in example app exercises the framework conventions that are already im
 
 - `npm run build`: bundle the framework plus the default example app into `dist/`
 - `npm run build -- --watch`: rerun the build when framework or app source files change using Node's watcher and built-in TypeScript support
+- `npm run dev`: run `elemental dev` with rebuilds, server restarts, live reload, layout stylesheet hot swaps, and safe route-subtree rerenders for browser-only updates
 - `npm run start`: start the generated server from `dist/server.js`
 - `npm run test`: run the unit suite and Playwright smoke coverage
 - `npm run test:unit`: run only the Vitest suite
@@ -187,6 +188,28 @@ The client runtime uses that payload to:
 - update managed head nodes, and
 - preserve the surrounding document shell when recovery is not needed.
 
+## Developer Reloading
+
+`elemental dev` keeps the development loop centered on the same outputs as production: `dist/server.js`, `dist/assets/*`, and `dist/manifest.json`.
+
+```bash
+npm run dev
+```
+
+The development wrapper does three distinct things after each successful rebuild:
+
+- restarts the generated server process against the fresh `dist/` artifacts,
+- notifies connected browsers over an SSE channel only after the new server is ready, and
+- chooses the safest browser update mode for the changed files.
+
+The update modes are:
+
+- live reload for server contract changes, route graph changes, framework runtime changes, non-layout CSS changes, and any browser module that appears to define custom elements,
+- stylesheet hot swap for `layout.css` updates, and
+- route-subtree rerender for safe browser-side route, layout, `error.ts`, and route-adjacent module edits.
+
+JavaScript HMR in v0 is intentionally framework-aware rather than module-local. Elemental reloads the current route payload, updates managed head content, reloads any new browser chunks, and replaces the current `data-route-outlet` subtree. That preserves the surrounding document shell while still falling back to a full reload when correctness is uncertain.
+
 ## Release Checklist
 
 Use this checklist as the phase-level release gate for v0:
@@ -209,3 +232,4 @@ Use this checklist as the phase-level release gate for v0:
 - `action()` must return a `Response` in v0.
 - Browser-reachable modules cannot import `*.server.ts` files.
 - `error.ts` is browser-only and is excluded from the server bundle.
+- `elemental dev` supports full-page live reload, `layout.css` hot swaps, and safe route-subtree rerenders with automatic fallback to reload when an update crosses an unsafe boundary.
