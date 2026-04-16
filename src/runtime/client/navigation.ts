@@ -190,11 +190,13 @@ async function submitFormNavigation(
   url: URL,
   options: FormNavigationSubmission,
 ): Promise<void> {
+  const headers = new Headers(options.headers);
+
+  headers.set(ROUTER_HEADER_NAME, "true");
+
   const response = await fetch(url, {
     body: options.body,
-    headers: {
-      [ROUTER_HEADER_NAME]: "true",
-    },
+    headers,
     method: options.method,
   });
 

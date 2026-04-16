@@ -4,7 +4,7 @@ import {
   resolveNearestServerErrorBoundaryForRoute,
 } from "../shared/error-boundaries.ts";
 import { html, type HtmlRenderable } from "../shared/html.ts";
-import { textResponse } from "../shared/responses.ts";
+import { htmlResponse, textResponse } from "../shared/responses.ts";
 import type { ErrorProps, RouteParams } from "../shared/types.ts";
 import { EMPTY_ASSETS } from "./assets.ts";
 import type { ServerRuntimeAdapter } from "./core.ts";
@@ -81,17 +81,12 @@ export async function renderServerErrorResponse(options: {
       );
     }
 
-    return new Response(
+    return htmlResponse(
       renderDocument({
         body,
         head,
       }),
-      {
-        headers: {
-          "content-type": "text/html; charset=utf-8",
-        },
-        status: options.status,
-      },
+      options.status,
     );
   } catch (error) {
     reportRuntimeError(options.runtime, error);

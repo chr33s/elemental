@@ -1128,49 +1128,82 @@ This preserves standard HTML form behavior while allowing richer client navigati
 
 ## Output
 
-Elemental v0 emits a runtime-oriented build output.
+Elemental v0 emits a runtime-oriented build output with shared route metadata plus target-specific runtime entries.
 
 ```txt
 dist/
+  index.js
+  cli.js
   server.js
+  server/*
+  srvx.js
+  worker.js
+  wrangler.jsonc
   assets/*
   manifest.json
 ```
 
+`server.js`, `server/*`, `assets/*`, and `manifest.json` are the shared build artifacts. `srvx.js` is the Node adapter entry, while `worker.js` and `wrangler.jsonc` are emitted for the Worker target.
+
 ### Manifest
 
-The manifest describes the route tree and its associated assets:
+The manifest describes the discovered app root, client entrypoint, route tree, browser bundles, server bundles, and emitted assets:
 
 ```ts
 type ManifestRoute = {
+  source: string;
+  serverSource?: string;
   pattern: string;
-  module: string;
-  serverModule?: string;
   errorBoundaries: string[];
   serverErrorBoundaries: string[];
   layouts: string[];
+  layoutStylesheets: string[];
+  browser: {
+    route: string;
+    layouts: string[];
+    errorBoundaries: string[];
+  };
+  server: {
+    route: string;
+    routeServer?: string;
+    layouts: string[];
+    serverErrorBoundaries: string[];
+  };
   assets: {
-    css: string[];
-    js: string[];
+    css?: string[];
+    js?: string[];
+    layoutCss?: string[];
+    scripts?: string[];
   };
 };
 
 type Manifest = {
-  routes: Record<string, ManifestRoute>;
+  appDir: string;
+  assets: {
+    clientEntry?: string;
+  };
+  generatedAt: string;
+  routes: ManifestRoute[];
 };
 ```
 
 Where:
 
-- keys in `routes` are the route path patterns (e.g., `/`, `/blog/:slug`),
+- `appDir` is the discovered application root relative to the build root,
+- `assets.clientEntry` is the browser bootstrap bundle path,
+- `generatedAt` records when the manifest was emitted,
+- `routes` is an ordered array in route-match precedence,
 - `pattern` is the URL pattern string,
-- `module` is the client bundle path for `index.ts`,
-- `serverModule` is the server bundle path for `index.server.ts` (if present),
-- `errorBoundaries` is an ordered list of browser bundle paths for nearest-ancestor `error.ts` modules from root to leaf,
-- `serverErrorBoundaries` is an ordered list of server bundle paths for nearest-ancestor `error.server.ts` modules from root to leaf,
-- `layouts` is an ordered list of layout bundle paths from root to leaf,
-- `assets.css` lists all CSS asset paths (layout and route),
-- `assets.js` lists all JS asset paths (layout and route).
+- `source` is the route `index.ts` source path,
+- `serverSource` is the route `index.server.ts` source path when present,
+- `errorBoundaries`, `serverErrorBoundaries`, `layouts`, and `layoutStylesheets` are ordered source-path ancestry lists from root to leaf,
+- `browser.route` is the browser bundle path for `index.ts`,
+- `browser.layouts` and `browser.errorBoundaries` are browser bundle paths for matched layouts and browser error boundaries,
+- `server.route` is the server bundle path for `index.ts`,
+- `server.routeServer` is the server bundle path for `index.server.ts` when present,
+- `server.layouts` and `server.serverErrorBoundaries` are server bundle paths for matched layouts and server error boundaries,
+- `assets.css` and `assets.layoutCss` list emitted stylesheet asset paths,
+- `assets.js` and `assets.scripts` list emitted browser script asset paths.
 
 ---
 

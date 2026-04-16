@@ -1,3 +1,4 @@
+import { safeHtml } from "elemental";
 import { describe, expect, it } from "vitest";
 import type { RouterPayload } from "../../src/runtime/server/app.ts";
 import {
@@ -13,6 +14,14 @@ describe("response helpers", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(await response.text()).toBe("<main>Hello</main>");
+  });
+
+  it("streams HTML responses without collapsing the rendered chunks first", async () => {
+    const response = htmlResponse([safeHtml("<main>"), "Hello", safeHtml("</main>")]);
+    const chunks = await readResponseChunks(response);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.join("")).toBe("<main>Hello</main>");
   });
 
   it("creates plain text responses with the expected content type", async () => {
@@ -68,3 +77,32 @@ describe("response helpers", () => {
     expect(await response.json()).toEqual(payload);
   });
 });
+
+async function readResponseChunks(response: Response): Promise<string[]> {
+  const reader = response.body?.getReader();
+
+  if (reader === undefined) {
+    return [];
+  }
+
+  const decoder = new TextDecoder();
+  const chunks: string[] = [];
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    chunks.push(decoder.decode(value, { stream: true }));
+  }
+
+  const trailingText = decoder.decode();
+
+  if (trailingText.length > 0) {
+    chunks.push(trailingText);
+  }
+
+  return chunks;
+}

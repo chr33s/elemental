@@ -26,11 +26,11 @@ describe("createFormSubmission", () => {
     expect(submission).toEqual({
       history: "push",
       method: "GET",
-      url: new URL("http://example.com/search?query=alpha+beta&attachment=avatar.png"),
+      url: new URL("http://example.com/search?existing=1&query=alpha+beta&attachment=avatar.png"),
     });
   });
 
-  it("preserves form data bodies for same-origin non-GET submissions", () => {
+  it("encodes same-origin non-GET submissions with the default form encoding", () => {
     const { FormDataMock, windowStub } = installBrowserStubs([["title", "Hello"]]);
     const form = {
       action: "",
@@ -41,8 +41,11 @@ describe("createFormSubmission", () => {
 
     expect(FormDataMock.calls).toEqual([[form, undefined]]);
     expect(submission).toEqual({
-      body: expect.any(FormDataMock),
+      body: new URLSearchParams({
+        title: "Hello",
+      }),
       history: "push",
+      headers: undefined,
       method: "POST",
       url: new URL(windowStub.location.href),
     });
@@ -60,11 +63,95 @@ describe("createFormSubmission", () => {
     expect(submission).toBeUndefined();
     expect(FormDataMock.calls).toEqual([]);
   });
+
+  it("honors submitter overrides for action and method", () => {
+    installBrowserStubs([["query", "router"]]);
+    const form = {
+      action: "/search?existing=1",
+      method: "post",
+    } as HTMLFormElement;
+    const submitter = new FakeSubmitter({
+      formAction: "/lookup?scope=guides",
+      formMethod: "get",
+    });
+
+    const submission = createFormSubmission(form, {
+      submitter,
+    } as SubmitEvent);
+
+    expect(submission).toEqual({
+      history: "push",
+      method: "GET",
+      url: new URL("http://example.com/lookup?scope=guides&query=router"),
+    });
+  });
+
+  it("preserves multipart form submissions without forcing a text encoding", () => {
+    const { FormDataMock } = installBrowserStubs([["title", "Hello"]]);
+    const form = {
+      action: "/submit",
+      enctype: "multipart/form-data",
+      method: "post",
+    } as HTMLFormElement;
+
+    const submission = createFormSubmission(form, {} as SubmitEvent);
+
+    expect(submission).toEqual({
+      body: expect.any(FormDataMock),
+      history: "push",
+      headers: undefined,
+      method: "POST",
+      url: new URL("http://example.com/submit"),
+    });
+  });
+
+  it("serializes text/plain submissions with an explicit content type", () => {
+    installBrowserStubs([
+      ["title", "Hello"],
+      ["attachment", { name: "notes.txt" }],
+    ]);
+    const form = {
+      action: "/submit",
+      enctype: "text/plain",
+      method: "post",
+    } as HTMLFormElement;
+
+    const submission = createFormSubmission(form, {} as SubmitEvent);
+
+    expect(submission).toEqual({
+      body: "title=Hello\r\nattachment=notes.txt",
+      history: "push",
+      headers: {
+        "content-type": "text/plain; charset=UTF-8",
+      },
+      method: "POST",
+      url: new URL("http://example.com/submit"),
+    });
+  });
+
+  it("leaves non-self form targets to native browser handling", () => {
+    const { FormDataMock } = installBrowserStubs([["title", "Hello"]]);
+    const form = {
+      action: "/submit",
+      method: "post",
+      target: "_blank",
+    } as HTMLFormElement;
+
+    const submission = createFormSubmission(form, {} as SubmitEvent);
+
+    expect(submission).toBeUndefined();
+    expect(FormDataMock.calls).toEqual([]);
+  });
 });
 
 class FakeHTMLElement {}
 
-class FakeSubmitter extends FakeHTMLElement {}
+class FakeSubmitter extends FakeHTMLElement {
+  constructor(overrides: Record<string, string> = {}) {
+    super();
+    Object.assign(this, overrides);
+  }
+}
 
 function installBrowserStubs(entries: Array<[string, string | { name: string }]>) {
   const windowStub = {

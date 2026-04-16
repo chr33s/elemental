@@ -150,6 +150,8 @@ Server runtime is split into:
 - `node.ts` - Node.js adapter
 - `worker.ts` - Cloudflare Workers adapter
 
+Document and server-error HTML responses stream UTF-8 chunks through the shared HTML response helper instead of collapsing the full document into one final string before creating the `Response`.
+
 **Rationale:**
 
 - The host-agnostic request pipeline stays in `core.ts`, but rendering concerns now live in dedicated modules

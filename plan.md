@@ -10,7 +10,7 @@ The implementation should ship:
 - filesystem routing with nested layouts and dynamic segments,
 - route/server/layout/error conventions exactly as specified,
 - a browser runtime for client navigation and custom element registration,
-- a build output containing `dist/server.js`, hashed assets, and `manifest.json`, and
+- a build output containing shared runtime artifacts plus target-specific adapter entries, and
 - enough tests and fixtures to prove the framework behaves as designed.
 
 ## Locked Scope
@@ -26,7 +26,7 @@ The following are explicitly in scope for v0:
 - escaped-by-default HTML rendering with `html` and trusted opt-in through `safeHtml`,
 - automatic client registration of named `HTMLElement` exports with `static tagName`,
 - structured partial router payloads for client navigation, and
-- a manifest describing route modules and assets.
+- a manifest describing route source paths, browser bundles, server bundles, and assets.
 
 The following remain out of scope for v0:
 

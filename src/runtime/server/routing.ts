@@ -139,7 +139,7 @@ export async function renderMatchedRoute(options: {
     url,
   });
 
-  return htmlResponse(renderSubtree(document));
+  return htmlResponse(document);
 }
 
 async function composeLayouts(options: {

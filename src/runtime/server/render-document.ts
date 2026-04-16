@@ -43,11 +43,16 @@ export function createManagedHead(options: {
       />`,
   );
 
-  return html`<meta name=${ELEMENTAL_HEAD_START_NAME} content="" />${options.head ??
-    EMPTY_HTML}<meta name=${ELEMENTAL_HEAD_END_NAME} content="" />${stylesheetTags}${scriptTags}`;
+  return [
+    html`<meta name=${ELEMENTAL_HEAD_START_NAME} content="" />`,
+    options.head ?? EMPTY_HTML,
+    html`<meta name=${ELEMENTAL_HEAD_END_NAME} content="" />`,
+    stylesheetTags,
+    scriptTags,
+  ];
 }
 
-export function renderDocument(options: RenderDocumentOptions): string {
+export function renderDocument(options: RenderDocumentOptions): HtmlRenderable {
   const scriptHrefs = [
     ...(options.scripts ?? []),
     ...(options.clientAssetHref === undefined ? [] : [options.clientAssetHref]),
@@ -59,15 +64,23 @@ export function renderDocument(options: RenderDocumentOptions): string {
     stylesheets: options.stylesheets,
   });
 
-  return renderToString(html`<!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        ${titleTag} ${managedHead}
-      </head>
+  return [
+    html`<!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+        </head>
+      </html> `,
+    titleTag,
+    html``,
+    managedHead,
+    html`</head>
       <body>
-        <div data-route-outlet>${options.body}</div>
+        <div data-route-outlet>`,
+    options.body,
+    html`</div>
       </body>
-    </html>`);
+    </html>`,
+  ];
 }

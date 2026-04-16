@@ -143,7 +143,30 @@ export function safeHtml(value: string): SafeHtmlValue {
  * This is used internally by the rendering pipeline.
  */
 export function renderToString(value: HtmlRenderable): string {
-  return renderRenderable(value);
+  return [...renderRenderableChunks(value)].join("");
+}
+
+/**
+ * Converts an HtmlRenderable value to a UTF-8 encoded ReadableStream.
+ * This lets the server runtime stream document responses without changing
+ * the existing escaping semantics.
+ */
+export function renderToReadableStream(value: HtmlRenderable): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder();
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of renderRenderableChunks(value)) {
+        if (chunk.length === 0) {
+          continue;
+        }
+
+        controller.enqueue(encoder.encode(chunk));
+      }
+
+      controller.close();
+    },
+  });
 }
 
 /**
@@ -202,27 +225,43 @@ function renderRenderable(
     rawTextElement?: RawTextElement | null;
   } = {},
 ): string {
+  return [...renderRenderableChunks(value, context)].join("");
+}
+
+function* renderRenderableChunks(
+  value: HtmlRenderable,
+  context: {
+    rawTextElement?: RawTextElement | null;
+  } = {},
+): Generator<string> {
   if (isHtmlResult(value)) {
-    return value.value;
+    yield value.value;
+    return;
   }
 
   if (isSafeHtmlValue(value)) {
-    return value.value;
+    yield value.value;
+    return;
   }
 
   if (isCssTextValue(value)) {
-    return context.rawTextElement === "style" ? value.raw : escapeHtml(value.raw);
+    yield context.rawTextElement === "style" ? value.raw : escapeHtml(value.raw);
+    return;
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => renderRenderable(entry, context)).join("");
+    for (const entry of value) {
+      yield* renderRenderableChunks(entry, context);
+    }
+
+    return;
   }
 
   if (value === false || value === null || value === undefined) {
-    return "";
+    return;
   }
 
-  return escapeHtml(String(value));
+  yield escapeHtml(String(value));
 }
 
 function shouldQuoteAttributeValue(
