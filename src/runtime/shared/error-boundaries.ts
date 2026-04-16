@@ -83,13 +83,10 @@ function resolveNearestBoundaryForPathname(
   pathname: string,
   kind: ErrorBoundaryKind,
 ): ResolvedErrorBoundary | undefined {
-  const directories = createManifestDirectoryMap(manifest);
+  const appDir = normalizeDirectoryPath(manifest.appDir);
+  const directories = createManifestDirectoryMap(manifest, appDir);
   const pathnameSegments = splitPathSegments(pathname);
-  const matchedDirectory = findDeepestMatchingDirectory(
-    directories,
-    pathnameSegments,
-    manifest.appDir,
-  );
+  const matchedDirectory = findDeepestMatchingDirectory(directories, pathnameSegments, appDir);
 
   if (matchedDirectory === undefined) {
     return undefined;
@@ -111,7 +108,7 @@ function resolveNearestBoundaryForPathname(
       };
     }
 
-    if (currentDirectoryPath === manifest.appDir) {
+    if (currentDirectoryPath === appDir) {
       return undefined;
     }
 
@@ -119,10 +116,13 @@ function resolveNearestBoundaryForPathname(
   }
 }
 
-function createManifestDirectoryMap(manifest: BuildManifest): Map<string, ManifestDirectory> {
+function createManifestDirectoryMap(
+  manifest: BuildManifest,
+  appDir: string,
+): Map<string, ManifestDirectory> {
   const directories = new Map<string, ManifestDirectory>();
 
-  ensureDirectory(directories, manifest.appDir, manifest.appDir);
+  ensureDirectory(directories, appDir, appDir);
 
   for (const route of manifest.routes) {
     for (const filePath of [
@@ -134,7 +134,7 @@ function createManifestDirectoryMap(manifest: BuildManifest): Map<string, Manife
       ...route.serverErrorBoundaries,
     ]) {
       if (filePath !== undefined) {
-        ensureDirectory(directories, manifest.appDir, dirnamePosix(filePath));
+        ensureDirectory(directories, appDir, dirnamePosix(filePath));
       }
     }
 
@@ -146,7 +146,7 @@ function createManifestDirectoryMap(manifest: BuildManifest): Map<string, Manife
         continue;
       }
 
-      ensureDirectory(directories, manifest.appDir, dirnamePosix(sourcePath)).browserBoundary = {
+      ensureDirectory(directories, appDir, dirnamePosix(sourcePath)).browserBoundary = {
         modulePath,
         sourcePath,
       };
@@ -160,7 +160,7 @@ function createManifestDirectoryMap(manifest: BuildManifest): Map<string, Manife
         continue;
       }
 
-      ensureDirectory(directories, manifest.appDir, dirnamePosix(sourcePath)).serverBoundary = {
+      ensureDirectory(directories, appDir, dirnamePosix(sourcePath)).serverBoundary = {
         modulePath,
         sourcePath,
       };

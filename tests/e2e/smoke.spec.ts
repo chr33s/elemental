@@ -231,6 +231,47 @@ test("enhances same-origin get forms through the router", async ({ page }) => {
   ).resolves.toBe(true);
 });
 
+test("restores enhanced GET form history entries on back and forward navigation", async ({
+  page,
+}) => {
+  await page.goto("/search");
+  await page.evaluate(() => {
+    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
+  });
+
+  await page.getByLabel("Query").fill("router");
+  await page.getByRole("button", { name: "Search" }).click();
+
+  await expect(page).toHaveURL(/\/search\?q=router$/u);
+  await expect(page.locator("#search-query")).toHaveText("router");
+
+  await page.goBack();
+
+  await expect(page).toHaveURL(/\/search$/u);
+  await expect(page).toHaveTitle("Search empty");
+  await expect(page.locator("#search-query")).toHaveText("empty");
+  await expect(
+    page.evaluate(
+      () =>
+        document.querySelector("#shell-marker") ===
+        (window as ElementalWindow).__elementalShellMarker,
+    ),
+  ).resolves.toBe(true);
+
+  await page.goForward();
+
+  await expect(page).toHaveURL(/\/search\?q=router$/u);
+  await expect(page).toHaveTitle("Search router");
+  await expect(page.locator("#search-query")).toHaveText("router");
+  await expect(
+    page.evaluate(
+      () =>
+        document.querySelector("#shell-marker") ===
+        (window as ElementalWindow).__elementalShellMarker,
+    ),
+  ).resolves.toBe(true);
+});
+
 test("recovers client-side navigation through the nearest browser boundary", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => {

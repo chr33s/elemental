@@ -1,0 +1,70 @@
+import { describe, expect, it } from "vitest";
+import type { RouterPayload } from "../../src/runtime/server/app.ts";
+import {
+  createRouterPayloadResponse,
+  isRouterRequest,
+} from "../../src/runtime/server/render-partial.ts";
+import { htmlResponse, textResponse } from "../../src/runtime/shared/responses.ts";
+
+describe("response helpers", () => {
+  it("creates HTML responses with the expected content type and default status", async () => {
+    const response = htmlResponse("<main>Hello</main>");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(await response.text()).toBe("<main>Hello</main>");
+  });
+
+  it("creates plain text responses with the expected content type", async () => {
+    const response = textResponse("Not Found", 404);
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await response.text()).toBe("Not Found");
+  });
+
+  it("detects router requests case-insensitively", () => {
+    expect(
+      isRouterRequest(
+        new Request("http://example.com/", {
+          headers: {
+            "X-Elemental-Router": "TRUE",
+          },
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isRouterRequest(
+        new Request("http://example.com/", {
+          headers: {
+            "X-Elemental-Router": "false",
+          },
+        }),
+      ),
+    ).toBe(false);
+    expect(isRouterRequest(new Request("http://example.com/"))).toBe(false);
+  });
+
+  it("serializes router payload responses with the supplied init", async () => {
+    const payload: RouterPayload = {
+      assets: {
+        scripts: ["/assets/client.js"],
+        stylesheets: ["/assets/app.css"],
+      },
+      head: "<title>About</title>",
+      outlet: "<main>About</main>",
+      status: 202,
+    };
+    const response = createRouterPayloadResponse(payload, {
+      headers: {
+        "x-test": "router",
+      },
+      status: 202,
+    });
+
+    expect(response.status).toBe(202);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("x-test")).toBe("router");
+    expect(await response.json()).toEqual(payload);
+  });
+});
