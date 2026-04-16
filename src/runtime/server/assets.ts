@@ -1,5 +1,6 @@
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
 import { html, type HtmlRenderable, type HtmlResult } from "../shared/html.ts";
+import { normalizeManifestRouteAssets } from "../shared/manifest-assets.ts";
 import type { RouterPayload } from "./core.ts";
 import { createManagedHead } from "./render-document.ts";
 
@@ -12,14 +13,13 @@ export function createResolvedAssets(
   manifest: BuildManifest,
   route: BuildManifestRoute,
 ): RouterPayload["assets"] {
-  const cssAssets = route.assets.css ?? route.assets.layoutCss ?? [];
-  const jsAssets = route.assets.js ?? route.assets.scripts ?? [];
+  const routeAssets = normalizeManifestRouteAssets(route);
 
   return {
-    scripts: [manifest.assets.clientEntry, ...jsAssets]
+    scripts: [manifest.assets.clientEntry, ...routeAssets.js]
       .filter((entryPath): entryPath is string => entryPath !== undefined)
       .map((entryPath) => `/${entryPath}`),
-    stylesheets: cssAssets.map((entryPath) => `/${entryPath}`),
+    stylesheets: routeAssets.css.map((entryPath) => `/${entryPath}`),
   };
 }
 

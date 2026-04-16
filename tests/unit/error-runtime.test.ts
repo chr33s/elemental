@@ -1,27 +1,19 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildProject } from "../../src/build/index.ts";
 import type { BuildManifest } from "../../src/build/manifest.ts";
 import { handleElementalRequest, type RouterPayload } from "../../src/runtime/server/app.ts";
+import {
+  cleanupTemporaryPaths,
+  buildTempApp as buildTemporaryApp,
+} from "./test-helpers/app-fixture.ts";
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 const temporaryPaths = new Set<string>();
 
 afterEach(async () => {
   vi.restoreAllMocks();
-
-  await Promise.all(
-    [...temporaryPaths].map((temporaryPath) =>
-      rm(temporaryPath, {
-        force: true,
-        recursive: true,
-      }),
-    ),
-  );
-
-  temporaryPaths.clear();
+  await cleanupTemporaryPaths(temporaryPaths);
 });
 
 describe("Phase 6 server error handling", () => {
@@ -343,38 +335,16 @@ async function buildTempApp(files: Record<string, string>): Promise<{
   manifest: BuildManifest;
   outDir: string;
 }> {
-  const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase6-app-"));
-  const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase6-dist-"));
-
-  temporaryPaths.add(appDir);
-  temporaryPaths.add(outDir);
-
-  await Promise.all(
-    Object.entries(files).map(([relativeFilePath, sourceText]) =>
-      writeRouteModule(appDir, relativeFilePath, sourceText),
-    ),
-  );
-
-  const result = await buildProject({
-    appDir,
-    outDir,
+  const result = await buildTemporaryApp({
+    appPrefix: ".tmp-phase6-app-",
+    files,
+    outPrefix: ".tmp-phase6-dist-",
     rootDir,
+    temporaryPaths,
   });
-  const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as BuildManifest;
 
   return {
-    manifest,
-    outDir,
+    manifest: result.manifest,
+    outDir: result.outDir,
   };
-}
-
-async function writeRouteModule(
-  appDir: string,
-  relativeFilePath: string,
-  sourceText: string,
-): Promise<void> {
-  const filePath = path.join(appDir, relativeFilePath);
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, sourceText, "utf8");
 }

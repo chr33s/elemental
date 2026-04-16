@@ -3,15 +3,7 @@ import { matchManifestRoute } from "../shared/routes.ts";
 import { reportRuntimeError, renderServerErrorResponse } from "./errors.ts";
 import { renderMatchedRoute } from "./routing.ts";
 
-export interface RouterPayload {
-  assets: {
-    scripts: string[];
-    stylesheets: string[];
-  };
-  head: string;
-  outlet: string;
-  status: number;
-}
+export type { RouterPayload } from "../shared/types.ts";
 
 export interface ServerRuntimeAdapter {
   reportError?: (error: unknown) => void;

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectShellPreserved, rememberShellMarker } from "./test-helpers/shell.ts";
 
 type ElementalWindow = Window & {
   __elementalShellMarker?: Element | null;
@@ -20,9 +21,7 @@ test("boots the browser runtime on the initial route", async ({ page }) => {
 
 test("navigates client-side while preserving the shell", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => {
-    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
-  });
+  await rememberShellMarker(page);
   await expect(page.evaluate(() => Boolean(customElements.get("fixture-badge")))).resolves.toBe(
     false,
   );
@@ -40,13 +39,7 @@ test("navigates client-side while preserving the shell", async ({ page }) => {
   await expect(page.evaluate(() => Boolean(customElements.get("fixture-badge")))).resolves.toBe(
     true,
   );
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 
   await page.goBack();
 
@@ -162,9 +155,7 @@ test("keeps outgoing guides styles attached until the view transition swaps rout
 
 test("navigates into a nested dynamic guide route with loader data", async ({ page }) => {
   await page.goto("/guides");
-  await page.evaluate(() => {
-    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
-  });
+  await rememberShellMarker(page);
 
   await page.getByRole("link", { name: "Runtime SSR" }).click();
 
@@ -177,20 +168,12 @@ test("navigates into a nested dynamic guide route with loader data", async ({ pa
   await expect(page.locator("#guide-topic")).toHaveText("runtime-ssr");
   await expect(page.locator("guide-callout")).toHaveAttribute("data-upgraded", "true");
   await expect(page.locator("guide-callout")).toHaveText("Dynamic route upgrade");
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 });
 
 test("enhances post forms that redirect back into the router", async ({ page }) => {
   await page.goto("/guestbook");
-  await page.evaluate(() => {
-    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
-  });
+  await rememberShellMarker(page);
 
   await page.getByLabel("Name").fill("Ada");
   await page.getByLabel("Message").fill("Router flows through Response redirects.");
@@ -201,20 +184,12 @@ test("enhances post forms that redirect back into the router", async ({ page }) 
   await expect(page.locator("#guestbook-status")).toHaveText(
     "Saved a note for Ada: Router flows through Response redirects.",
   );
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 });
 
 test("enhances same-origin get forms through the router", async ({ page }) => {
   await page.goto("/search");
-  await page.evaluate(() => {
-    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
-  });
+  await rememberShellMarker(page);
 
   await page.getByLabel("Query").fill("router");
   await page.getByRole("button", { name: "Search" }).click();
@@ -222,22 +197,14 @@ test("enhances same-origin get forms through the router", async ({ page }) => {
   await expect(page).toHaveURL(/\/search\?q=router$/u);
   await expect(page).toHaveTitle("Search router");
   await expect(page.locator("#search-query")).toHaveText("router");
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 });
 
 test("restores enhanced GET form history entries on back and forward navigation", async ({
   page,
 }) => {
   await page.goto("/search");
-  await page.evaluate(() => {
-    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
-  });
+  await rememberShellMarker(page);
 
   await page.getByLabel("Query").fill("router");
   await page.getByRole("button", { name: "Search" }).click();
@@ -250,33 +217,19 @@ test("restores enhanced GET form history entries on back and forward navigation"
   await expect(page).toHaveURL(/\/search$/u);
   await expect(page).toHaveTitle("Search empty");
   await expect(page.locator("#search-query")).toHaveText("empty");
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 
   await page.goForward();
 
   await expect(page).toHaveURL(/\/search\?q=router$/u);
   await expect(page).toHaveTitle("Search router");
   await expect(page.locator("#search-query")).toHaveText("router");
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 });
 
 test("recovers client-side navigation through the nearest browser boundary", async ({ page }) => {
   await page.goto("/");
-  await page.evaluate(() => {
-    (window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
-  });
+  await rememberShellMarker(page);
 
   await page.getByRole("link", { name: "Recover" }).click();
 
@@ -287,13 +240,7 @@ test("recovers client-side navigation through the nearest browser boundary", asy
   await expect(page).toHaveTitle("Recovered");
   await expect(page.locator('meta[name="recovery-status"]')).toHaveAttribute("content", "200");
 
-  await expect(
-    page.evaluate(
-      () =>
-        document.querySelector("#shell-marker") ===
-        (window as ElementalWindow).__elementalShellMarker,
-    ),
-  ).resolves.toBe(true);
+  await expectShellPreserved(page);
 });
 
 test("escapes intercepted reload fallbacks with a document navigation", async ({ page }) => {

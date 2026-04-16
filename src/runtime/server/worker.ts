@@ -1,4 +1,5 @@
 import type { BuildManifest } from "../../build/manifest.ts";
+import { textResponse } from "../shared/responses.ts";
 import { createModuleRegistryResolver, handleElementalRequestWithRuntime } from "./core.ts";
 
 export interface WorkerAssetsBinding {
@@ -33,12 +34,7 @@ export function createWorkerHandler(options: CreateWorkerHandlerOptions): {
               return env.ASSETS.fetch(assetRequest);
             }
 
-            return new Response("Asset not found", {
-              headers: {
-                "content-type": "text/plain; charset=utf-8",
-              },
-              status: 404,
-            });
+            return textResponse("Asset not found", 404);
           },
         },
       });

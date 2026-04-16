@@ -6,8 +6,6 @@ import {
 } from "../shared/browser-runtime.ts";
 import { html, renderToString, type HtmlRenderable } from "../shared/html.ts";
 
-const EMPTY_HTML = html``;
-
 export interface RenderDocumentOptions {
   body: HtmlRenderable;
   clientAssetHref?: string;
@@ -45,7 +43,7 @@ export function createManagedHead(options: {
 
   return [
     html`<meta name=${ELEMENTAL_HEAD_START_NAME} content="" />`,
-    options.head ?? EMPTY_HTML,
+    options.head ?? html``,
     html`<meta name=${ELEMENTAL_HEAD_END_NAME} content="" />`,
     stylesheetTags,
     scriptTags,
@@ -57,7 +55,7 @@ export function renderDocument(options: RenderDocumentOptions): HtmlRenderable {
     ...(options.scripts ?? []),
     ...(options.clientAssetHref === undefined ? [] : [options.clientAssetHref]),
   ];
-  const titleTag = options.title === undefined ? EMPTY_HTML : html`<title>${options.title}</title>`;
+  const titleTag = options.title === undefined ? html`` : html`<title>${options.title}</title>`;
   const managedHead = createManagedHead({
     head: options.head,
     scripts: scriptHrefs,

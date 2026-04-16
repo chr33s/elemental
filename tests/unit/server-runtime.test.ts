@@ -1,10 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildProject } from "../../src/build/index.ts";
 import type { BuildManifest } from "../../src/build/manifest.ts";
 import { handleElementalRequest, type RouterPayload } from "../../src/runtime/server/app.ts";
+import { writeRouteModule } from "./test-helpers/app-fixture.ts";
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -454,15 +455,4 @@ function requireRoute(manifest: BuildManifest, pattern: string) {
   expect(route).toBeDefined();
 
   return route!;
-}
-
-async function writeRouteModule(
-  appDir: string,
-  relativeFilePath: string,
-  sourceText: string,
-): Promise<void> {
-  const filePath = path.join(appDir, relativeFilePath);
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, sourceText, "utf8");
 }

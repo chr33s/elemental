@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -8,6 +8,8 @@ import type { DiscoveredRoute } from "../../src/build/discover.ts";
 import { discoverRoutes } from "../../src/build/discover.ts";
 import { buildProject } from "../../src/build/index.ts";
 import type { BuildManifest } from "../../src/build/manifest.ts";
+import { toPosixPath } from "../../src/shared/path-utils.ts";
+import { writeRouteModule } from "./test-helpers/app-fixture.ts";
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 const temporaryPaths = new Set<string>();
@@ -721,19 +723,4 @@ function summarizeRoute(route: DiscoveredRoute) {
     serverErrorBoundaries: route.serverErrorBoundaries,
     serverFilePath: route.serverFilePath,
   };
-}
-
-async function writeRouteModule(
-  appDir: string,
-  relativeFilePath: string,
-  sourceText: string,
-): Promise<void> {
-  const filePath = path.join(appDir, relativeFilePath);
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, sourceText, "utf8");
-}
-
-function toPosixPath(value: string): string {
-  return value.split(path.sep).join("/");
 }

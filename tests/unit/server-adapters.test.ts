@@ -1,11 +1,10 @@
 import { once } from "node:events";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { html } from "elemental";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { buildProject } from "../../src/build/index.ts";
 import type { BuildManifest } from "../../src/build/manifest.ts";
 import {
   createNodeRuntime,
@@ -13,23 +12,21 @@ import {
   startServer,
 } from "../../src/runtime/server/node.ts";
 import { createWorkerHandler } from "../../src/runtime/server/worker.ts";
+import {
+  buildTempApp as buildTemporaryApp,
+  cleanupTemporaryPaths,
+} from "./test-helpers/app-fixture.ts";
+import {
+  createManifest as createBaseManifest,
+  createRoute as createBaseRoute,
+} from "./test-helpers/manifest-fixtures.ts";
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 const temporaryPaths = new Set<string>();
 
 afterEach(async () => {
   vi.restoreAllMocks();
-
-  await Promise.all(
-    [...temporaryPaths].map((temporaryPath) =>
-      rm(temporaryPath, {
-        force: true,
-        recursive: true,
-      }),
-    ),
-  );
-
-  temporaryPaths.clear();
+  await cleanupTemporaryPaths(temporaryPaths);
 });
 
 describe("server adapters", () => {
@@ -200,62 +197,31 @@ async function buildTempApp(files: Record<string, string>): Promise<{
   manifest: BuildManifest;
   outDir: string;
 }> {
-  const appDir = await mkdtemp(path.join(rootDir, ".tmp-server-adapter-app-"));
-  const outDir = await mkdtemp(path.join(rootDir, ".tmp-server-adapter-dist-"));
-
-  temporaryPaths.add(appDir);
-  temporaryPaths.add(outDir);
-
-  await Promise.all(
-    Object.entries(files).map(([relativeFilePath, sourceText]) =>
-      writeRouteModule(appDir, relativeFilePath, sourceText),
-    ),
-  );
-
-  const result = await buildProject({
-    appDir,
-    outDir,
+  const result = await buildTemporaryApp({
+    appPrefix: ".tmp-server-adapter-app-",
+    files,
+    outPrefix: ".tmp-server-adapter-dist-",
     rootDir,
+    temporaryPaths,
   });
 
   return {
-    manifest: JSON.parse(await readFile(result.manifestPath, "utf8")) as BuildManifest,
-    outDir,
+    manifest: result.manifest,
+    outDir: result.outDir,
   };
 }
 
 function createManifest(routes: BuildManifest["routes"]): BuildManifest {
-  return {
-    appDir: "app/src",
-    assets: {},
-    generatedAt: "2026-04-16T00:00:00.000Z",
-    routes,
-  };
+  return createBaseManifest(routes);
 }
 
 function createRoute(pattern: string): BuildManifest["routes"][number] {
-  return {
-    assets: {
-      layoutCss: [],
-      scripts: [],
-    },
-    browser: {
-      errorBoundaries: [],
-      layouts: [],
-      route: "assets/route.js",
-    },
-    errorBoundaries: [],
-    layoutStylesheets: [],
-    layouts: [],
-    pattern,
+  return createBaseRoute(pattern, {
     server: {
-      layouts: [],
       route: "server/index.js",
-      serverErrorBoundaries: [],
     },
     source: "app/src/index.ts",
-    serverErrorBoundaries: [],
-  };
+  });
 }
 
 async function closeServer(server: Parameters<typeof closeNodeServer>[0]): Promise<void> {
@@ -275,15 +241,4 @@ async function closeNodeServer(server: {
       resolve();
     });
   });
-}
-
-async function writeRouteModule(
-  appDir: string,
-  relativeFilePath: string,
-  sourceText: string,
-): Promise<void> {
-  const filePath = path.join(appDir, relativeFilePath);
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, sourceText, "utf8");
 }

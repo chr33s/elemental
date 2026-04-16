@@ -1,7 +1,13 @@
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
+import {
+  dirnamePosix,
+  normalizePosixPath,
+  relativePosixPath,
+  splitPathSegments,
+} from "../../shared/path-utils.ts";
 import type { RouteParams } from "./types.ts";
 
-type ErrorBoundaryKind = "browser" | "server";
+export type ErrorBoundaryKind = "browser" | "server";
 
 interface BoundaryEntry {
   modulePath: string;
@@ -28,62 +34,12 @@ export interface ResolvedErrorBoundary {
   sourcePath: string;
 }
 
-export function resolveNearestBrowserErrorBoundaryForPathname(
-  manifest: BuildManifest,
-  pathname: string,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestBoundaryForPathname(manifest, pathname, "browser");
-}
-
-export function resolveNearestBrowserErrorBoundaryForRoute(
-  route: BuildManifestRoute,
-  params: RouteParams,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestBoundaryForRoute(route, params, "browser");
-}
-
-export function resolveNearestServerErrorBoundaryForPathname(
-  manifest: BuildManifest,
-  pathname: string,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestBoundaryForPathname(manifest, pathname, "server");
-}
-
-export function resolveNearestServerErrorBoundaryForRoute(
-  route: BuildManifestRoute,
-  params: RouteParams,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestBoundaryForRoute(route, params, "server");
-}
-
-function resolveNearestBoundaryForRoute(
-  route: BuildManifestRoute,
-  params: RouteParams,
-  kind: ErrorBoundaryKind,
-): ResolvedErrorBoundary | undefined {
-  const sourcePaths = kind === "browser" ? route.errorBoundaries : route.serverErrorBoundaries;
-  const modulePaths =
-    kind === "browser" ? route.browser.errorBoundaries : route.server.serverErrorBoundaries;
-  const boundaryIndex = Math.min(sourcePaths.length, modulePaths.length) - 1;
-
-  if (boundaryIndex < 0) {
-    return undefined;
-  }
-
-  return {
-    directoryPath: dirnamePosix(sourcePaths[boundaryIndex]),
-    modulePath: modulePaths[boundaryIndex],
-    params,
-    sourcePath: sourcePaths[boundaryIndex],
-  };
-}
-
-function resolveNearestBoundaryForPathname(
+export function resolveNearestErrorBoundaryForPathname(
   manifest: BuildManifest,
   pathname: string,
   kind: ErrorBoundaryKind,
 ): ResolvedErrorBoundary | undefined {
-  const appDir = normalizeDirectoryPath(manifest.appDir);
+  const appDir = normalizePosixPath(manifest.appDir);
   const directories = createManifestDirectoryMap(manifest, appDir);
   const pathnameSegments = splitPathSegments(pathname);
   const matchedDirectory = findDeepestMatchingDirectory(directories, pathnameSegments, appDir);
@@ -114,6 +70,56 @@ function resolveNearestBoundaryForPathname(
 
     currentDirectoryPath = dirnamePosix(currentDirectoryPath);
   }
+}
+
+export function resolveNearestErrorBoundaryForRoute(
+  route: BuildManifestRoute,
+  params: RouteParams,
+  kind: ErrorBoundaryKind,
+): ResolvedErrorBoundary | undefined {
+  const sourcePaths = kind === "browser" ? route.errorBoundaries : route.serverErrorBoundaries;
+  const modulePaths =
+    kind === "browser" ? route.browser.errorBoundaries : route.server.serverErrorBoundaries;
+  const boundaryIndex = Math.min(sourcePaths.length, modulePaths.length) - 1;
+
+  if (boundaryIndex < 0) {
+    return undefined;
+  }
+
+  return {
+    directoryPath: dirnamePosix(sourcePaths[boundaryIndex]),
+    modulePath: modulePaths[boundaryIndex],
+    params,
+    sourcePath: sourcePaths[boundaryIndex],
+  };
+}
+
+export function resolveNearestBrowserErrorBoundaryForPathname(
+  manifest: BuildManifest,
+  pathname: string,
+): ResolvedErrorBoundary | undefined {
+  return resolveNearestErrorBoundaryForPathname(manifest, pathname, "browser");
+}
+
+export function resolveNearestBrowserErrorBoundaryForRoute(
+  route: BuildManifestRoute,
+  params: RouteParams,
+): ResolvedErrorBoundary | undefined {
+  return resolveNearestErrorBoundaryForRoute(route, params, "browser");
+}
+
+export function resolveNearestServerErrorBoundaryForPathname(
+  manifest: BuildManifest,
+  pathname: string,
+): ResolvedErrorBoundary | undefined {
+  return resolveNearestErrorBoundaryForPathname(manifest, pathname, "server");
+}
+
+export function resolveNearestServerErrorBoundaryForRoute(
+  route: BuildManifestRoute,
+  params: RouteParams,
+): ResolvedErrorBoundary | undefined {
+  return resolveNearestErrorBoundaryForRoute(route, params, "server");
 }
 
 function createManifestDirectoryMap(
@@ -175,7 +181,7 @@ function ensureDirectory(
   appDir: string,
   directoryPath: string,
 ): ManifestDirectory {
-  const normalizedPath = normalizeDirectoryPath(directoryPath);
+  const normalizedPath = normalizePosixPath(directoryPath);
   const existingDirectory = directories.get(normalizedPath);
 
   if (existingDirectory !== undefined) {
@@ -195,36 +201,6 @@ function ensureDirectory(
   directories.set(normalizedPath, directory);
 
   return directory;
-}
-
-function normalizeDirectoryPath(directoryPath: string): string {
-  const isAbsolute = directoryPath.startsWith("/");
-  const segments: string[] = [];
-
-  for (const segment of directoryPath.split("/")) {
-    if (segment === "" || segment === ".") {
-      continue;
-    }
-
-    if (segment === "..") {
-      if (segments.length > 0 && segments[segments.length - 1] !== "..") {
-        segments.pop();
-      } else if (!isAbsolute) {
-        segments.push(segment);
-      }
-
-      continue;
-    }
-
-    segments.push(segment);
-  }
-
-  const normalizedPath =
-    `${isAbsolute ? "/" : ""}${segments.join("/")}` || (isAbsolute ? "/" : ".");
-
-  return normalizedPath.endsWith("/") && normalizedPath !== "/"
-    ? normalizedPath.slice(0, -1)
-    : normalizedPath;
 }
 
 function findDeepestMatchingDirectory(
@@ -360,64 +336,4 @@ function matchDirectorySegments(
     params,
     specificity,
   };
-}
-
-function splitPathSegments(pathname: string): string[] {
-  if (pathname === "/") {
-    return [];
-  }
-
-  return pathname
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => decodeURIComponent(segment));
-}
-
-function dirnamePosix(directoryPath: string): string {
-  const normalizedPath = normalizeDirectoryPath(directoryPath);
-
-  if (normalizedPath === "/") {
-    return "/";
-  }
-
-  const lastSlashIndex = normalizedPath.lastIndexOf("/");
-
-  if (lastSlashIndex < 0) {
-    return ".";
-  }
-
-  if (lastSlashIndex === 0) {
-    return "/";
-  }
-
-  return normalizedPath.slice(0, lastSlashIndex);
-}
-
-function relativePosixPath(fromPath: string, toPath: string): string {
-  const fromSegments = toPathSegments(fromPath);
-  const toSegments = toPathSegments(toPath);
-  let sharedIndex = 0;
-
-  while (
-    sharedIndex < fromSegments.length &&
-    sharedIndex < toSegments.length &&
-    fromSegments[sharedIndex] === toSegments[sharedIndex]
-  ) {
-    sharedIndex += 1;
-  }
-
-  return [
-    ...Array.from({ length: Math.max(0, fromSegments.length - sharedIndex) }, () => ".."),
-    ...toSegments.slice(sharedIndex),
-  ].join("/");
-}
-
-function toPathSegments(directoryPath: string): string[] {
-  const normalizedPath = normalizeDirectoryPath(directoryPath);
-
-  if (normalizedPath === "/" || normalizedPath === ".") {
-    return [];
-  }
-
-  return normalizedPath.replace(/^\//u, "").split("/");
 }

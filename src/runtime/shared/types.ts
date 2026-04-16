@@ -19,6 +19,18 @@ export interface ClientErrorProps {
   url: URL;
 }
 
+export interface RouterAssets {
+  scripts: string[];
+  stylesheets: string[];
+}
+
+export interface RouterPayload {
+  assets: RouterAssets;
+  head: string;
+  outlet: string;
+  status: number;
+}
+
 export interface RouteProps {
   params: RouteParams;
   data: Record<string, unknown>;

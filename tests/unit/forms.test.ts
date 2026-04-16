@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createFormSubmission } from "../../src/runtime/client/forms.ts";
+import { FakeSubmitter, installFormBrowserStubs } from "./test-helpers/form-browser.ts";
 
 describe("createFormSubmission", () => {
   afterEach(() => {
@@ -7,7 +8,7 @@ describe("createFormSubmission", () => {
   });
 
   it("serializes same-origin GET submissions into the destination URL", () => {
-    const { FormDataMock } = installBrowserStubs([
+    const { FormDataMock } = installFormBrowserStubs([
       ["query", "alpha beta"],
       ["attachment", { name: "avatar.png" }],
     ]);
@@ -31,7 +32,7 @@ describe("createFormSubmission", () => {
   });
 
   it("encodes same-origin non-GET submissions with the default form encoding", () => {
-    const { FormDataMock, windowStub } = installBrowserStubs([["title", "Hello"]]);
+    const { FormDataMock, windowStub } = installFormBrowserStubs([["title", "Hello"]]);
     const form = {
       action: "",
       method: "post",
@@ -52,7 +53,7 @@ describe("createFormSubmission", () => {
   });
 
   it("skips cross-origin submissions without constructing form data", () => {
-    const { FormDataMock } = installBrowserStubs([["title", "Hello"]]);
+    const { FormDataMock } = installFormBrowserStubs([["title", "Hello"]]);
     const form = {
       action: "https://other.example.com/submit",
       method: "post",
@@ -65,7 +66,7 @@ describe("createFormSubmission", () => {
   });
 
   it("honors submitter overrides for action and method", () => {
-    installBrowserStubs([["query", "router"]]);
+    installFormBrowserStubs([["query", "router"]]);
     const form = {
       action: "/search?existing=1",
       method: "post",
@@ -87,7 +88,7 @@ describe("createFormSubmission", () => {
   });
 
   it("preserves multipart form submissions without forcing a text encoding", () => {
-    const { FormDataMock } = installBrowserStubs([["title", "Hello"]]);
+    const { FormDataMock } = installFormBrowserStubs([["title", "Hello"]]);
     const form = {
       action: "/submit",
       enctype: "multipart/form-data",
@@ -106,7 +107,7 @@ describe("createFormSubmission", () => {
   });
 
   it("serializes text/plain submissions with an explicit content type", () => {
-    installBrowserStubs([
+    installFormBrowserStubs([
       ["title", "Hello"],
       ["attachment", { name: "notes.txt" }],
     ]);
@@ -130,7 +131,7 @@ describe("createFormSubmission", () => {
   });
 
   it("leaves non-self form targets to native browser handling", () => {
-    const { FormDataMock } = installBrowserStubs([["title", "Hello"]]);
+    const { FormDataMock } = installFormBrowserStubs([["title", "Hello"]]);
     const form = {
       action: "/submit",
       method: "post",
@@ -143,45 +144,3 @@ describe("createFormSubmission", () => {
     expect(FormDataMock.calls).toEqual([]);
   });
 });
-
-class FakeHTMLElement {}
-
-class FakeSubmitter extends FakeHTMLElement {
-  constructor(overrides: Record<string, string> = {}) {
-    super();
-    Object.assign(this, overrides);
-  }
-}
-
-function installBrowserStubs(entries: Array<[string, string | { name: string }]>) {
-  const windowStub = {
-    location: {
-      href: "http://example.com/current?keep=1",
-      origin: "http://example.com",
-    },
-  };
-  class FormDataMock {
-    static calls: Array<[unknown, unknown?]> = [];
-    readonly form: unknown;
-    readonly submitter?: unknown;
-
-    constructor(form: unknown, submitter?: unknown) {
-      this.form = form;
-      this.submitter = submitter;
-      FormDataMock.calls.push([form, submitter]);
-    }
-
-    entries(): IterableIterator<[string, string | { name: string }]> {
-      return entries.values();
-    }
-  }
-
-  vi.stubGlobal("window", windowStub);
-  vi.stubGlobal("HTMLElement", FakeHTMLElement);
-  vi.stubGlobal("FormData", FormDataMock);
-
-  return {
-    FormDataMock,
-    windowStub,
-  };
-}

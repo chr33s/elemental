@@ -1,11 +1,11 @@
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
 import { html, type HtmlRenderable } from "../shared/html.ts";
-import { htmlResponse } from "../shared/responses.ts";
+import { htmlResponse, textResponse } from "../shared/responses.ts";
+import { createRouterPayloadResponse, isRouterRequest } from "../shared/router-protocol.ts";
 import type { LayoutProps, RouteParams, RouteProps, RouteServerContext } from "../shared/types.ts";
 import { createResolvedAssets, composeAssetHead } from "./assets.ts";
 import type { RouterPayload, ServerRuntimeAdapter } from "./core.ts";
 import { renderDocument, renderSubtree } from "./render-document.ts";
-import { createRouterPayloadResponse, isRouterRequest } from "./render-partial.ts";
 
 interface CompiledLayoutModule {
   default?: (props: LayoutProps) => HtmlRenderable | Promise<HtmlRenderable>;
@@ -21,8 +21,6 @@ interface CompiledRouteServerModule {
   default?: (context: RouteServerContext) => Response | Promise<Response>;
   loader?: (context: RouteServerContext) => unknown;
 }
-
-const EMPTY_HTML = html``;
 
 export async function renderMatchedRoute(options: {
   manifest: BuildManifest;
@@ -60,12 +58,8 @@ export async function renderMatchedRoute(options: {
 
   if (request.method !== "GET" && request.method !== "HEAD") {
     if (typeof routeServerModule?.action !== "function") {
-      return new Response("Method Not Allowed", {
-        headers: {
-          allow: "GET, HEAD",
-          "content-type": "text/plain; charset=utf-8",
-        },
-        status: 405,
+      return textResponse("Method Not Allowed", 405, {
+        allow: "GET, HEAD",
       });
     }
 
@@ -97,13 +91,13 @@ export async function renderMatchedRoute(options: {
     url,
   };
   const routeHead =
-    typeof routeModule.head === "function" ? await routeModule.head(routeProps) : EMPTY_HTML;
+    typeof routeModule.head === "function" ? await routeModule.head(routeProps) : html``;
   const routeBody = await routeModule.default(routeProps);
   const assets = createResolvedAssets(manifest, route);
 
   if (isRouterRequest(request)) {
     const outlet = await composeLayouts({
-      head: EMPTY_HTML,
+      head: html``,
       layoutModulePaths: route.server.layouts.slice(1),
       outlet: routeBody,
       params,

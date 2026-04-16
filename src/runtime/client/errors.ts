@@ -1,17 +1,13 @@
 import type { BuildManifest } from "../../build/manifest.ts";
 import {
-  resolveNearestBrowserErrorBoundaryForPathname,
-  resolveNearestBrowserErrorBoundaryForRoute,
+  resolveNearestErrorBoundaryForPathname,
+  resolveNearestErrorBoundaryForRoute,
   type ResolvedErrorBoundary,
 } from "../shared/error-boundaries.ts";
-import { renderToString, type HtmlRenderable } from "../shared/html.ts";
+import { loadErrorBoundaryModule } from "../shared/error-boundary-modules.ts";
+import { renderToString } from "../shared/html.ts";
 import type { MatchedManifestRoute } from "../shared/routes.ts";
 import type { ClientErrorProps } from "../shared/types.ts";
-
-interface CompiledBrowserErrorBoundaryModule {
-  default?: (props: ClientErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
-  head?: (props: ClientErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
-}
 
 export type MatchedClientRoute = MatchedManifestRoute;
 
@@ -32,25 +28,23 @@ export async function renderClientErrorBoundary(options: {
 }): Promise<RenderedClientErrorBoundary | undefined> {
   const boundary =
     options.matchedRoute === undefined
-      ? resolveNearestBrowserErrorBoundaryForPathname(options.manifest, options.url.pathname)
-      : resolveNearestBrowserErrorBoundaryForRoute(
+      ? resolveNearestErrorBoundaryForPathname(options.manifest, options.url.pathname, "browser")
+      : resolveNearestErrorBoundaryForRoute(
           options.matchedRoute.route,
           options.matchedRoute.params,
+          "browser",
         );
 
   if (boundary === undefined) {
     return undefined;
   }
 
-  const boundaryModule = (await options.resolver(
-    boundary.modulePath,
-  )) as CompiledBrowserErrorBoundaryModule;
-
-  if (typeof boundaryModule.default !== "function") {
-    throw new TypeError(
-      `Browser error boundary ${boundary.sourcePath} must export a default render function.`,
-    );
-  }
+  const boundaryModule = await loadErrorBoundaryModule<ClientErrorProps>({
+    kind: "browser",
+    modulePath: boundary.modulePath,
+    resolver: options.resolver,
+    sourcePath: boundary.sourcePath,
+  });
 
   const props: ClientErrorProps = {
     error: options.error,
@@ -60,11 +54,9 @@ export async function renderClientErrorBoundary(options: {
     url: options.url,
   };
 
-  const outlet = renderToString(await boundaryModule.default(props));
+  const outlet = renderToString(await boundaryModule.render(props));
   const head =
-    typeof boundaryModule.head === "function"
-      ? renderToString(await boundaryModule.head(props))
-      : "";
+    boundaryModule.head === undefined ? "" : renderToString(await boundaryModule.head(props));
 
   return {
     boundary,

@@ -1,22 +1,16 @@
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
 import {
-  resolveNearestServerErrorBoundaryForPathname,
-  resolveNearestServerErrorBoundaryForRoute,
+  resolveNearestErrorBoundaryForPathname,
+  resolveNearestErrorBoundaryForRoute,
 } from "../shared/error-boundaries.ts";
-import { html, type HtmlRenderable } from "../shared/html.ts";
+import { loadErrorBoundaryModule } from "../shared/error-boundary-modules.ts";
+import { html } from "../shared/html.ts";
 import { htmlResponse, textResponse } from "../shared/responses.ts";
+import { createRouterPayloadResponse, isRouterRequest } from "../shared/router-protocol.ts";
 import type { ErrorProps, RouteParams } from "../shared/types.ts";
 import { EMPTY_ASSETS } from "./assets.ts";
 import type { ServerRuntimeAdapter } from "./core.ts";
 import { renderDocument, renderSubtree } from "./render-document.ts";
-import { createRouterPayloadResponse, isRouterRequest } from "./render-partial.ts";
-
-interface CompiledServerErrorBoundaryModule {
-  default?: (props: ErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
-  head?: (props: ErrorProps) => HtmlRenderable | Promise<HtmlRenderable>;
-}
-
-const EMPTY_HTML = html``;
 
 export async function renderServerErrorResponse(options: {
   error: unknown;
@@ -33,10 +27,11 @@ export async function renderServerErrorResponse(options: {
   const url = new URL(options.request.url);
   const resolvedBoundary =
     options.matchedRoute === undefined
-      ? resolveNearestServerErrorBoundaryForPathname(options.manifest, url.pathname)
-      : resolveNearestServerErrorBoundaryForRoute(
+      ? resolveNearestErrorBoundaryForPathname(options.manifest, url.pathname, "server")
+      : resolveNearestErrorBoundaryForRoute(
           options.matchedRoute.route,
           options.matchedRoute.params,
+          "server",
         );
 
   if (resolvedBoundary === undefined) {
@@ -44,16 +39,12 @@ export async function renderServerErrorResponse(options: {
   }
 
   try {
-    const boundaryModule =
-      await options.runtime.resolveServerModule<CompiledServerErrorBoundaryModule>(
-        resolvedBoundary.modulePath,
-      );
-
-    if (typeof boundaryModule.default !== "function") {
-      throw new TypeError(
-        `Server error boundary ${resolvedBoundary.sourcePath} must export a default render function.`,
-      );
-    }
+    const boundaryModule = await loadErrorBoundaryModule<ErrorProps>({
+      kind: "server",
+      modulePath: resolvedBoundary.modulePath,
+      resolver: options.runtime.resolveServerModule,
+      sourcePath: resolvedBoundary.sourcePath,
+    });
 
     const props: ErrorProps = {
       error: options.error,
@@ -63,9 +54,8 @@ export async function renderServerErrorResponse(options: {
       statusText: options.statusText,
       url,
     };
-    const head =
-      typeof boundaryModule.head === "function" ? await boundaryModule.head(props) : EMPTY_HTML;
-    const body = await boundaryModule.default(props);
+    const head = boundaryModule.head === undefined ? html`` : await boundaryModule.head(props);
+    const body = await boundaryModule.render(props);
 
     if (isRouterRequest(options.request)) {
       return createRouterPayloadResponse(

@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { BuildManifestRoute } from "../../src/build/manifest.ts";
-import {
-  matchManifestRoute,
-  matchRoutePattern,
-  splitPathSegments,
-} from "../../src/runtime/shared/routes.ts";
+import { matchManifestRoute, matchRoutePattern } from "../../src/runtime/shared/routes.ts";
+import { splitPathSegments } from "../../src/shared/path-utils.ts";
+import { createRoute } from "./test-helpers/manifest-fixtures.ts";
 
 describe("route matching", () => {
   it("matches static, dynamic, and catch-all patterns with decoded params", () => {
@@ -40,28 +38,3 @@ describe("route matching", () => {
     });
   });
 });
-
-function createRoute(pattern: string): BuildManifestRoute {
-  return {
-    assets: {
-      layoutCss: [],
-      scripts: [],
-    },
-    browser: {
-      errorBoundaries: [],
-      layouts: [],
-      route: "assets/route.js",
-    },
-    errorBoundaries: [],
-    layoutStylesheets: [],
-    layouts: [],
-    pattern,
-    server: {
-      layouts: [],
-      route: "server/route.js",
-      serverErrorBoundaries: [],
-    },
-    serverErrorBoundaries: [],
-    source: `app/src${pattern === "/" ? "/index.ts" : `${pattern}/index.ts`}`,
-  };
-}

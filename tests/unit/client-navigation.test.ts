@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { BuildManifest, BuildManifestRoute } from "../../src/build/manifest.ts";
+import type { BuildManifest } from "../../src/build/manifest.ts";
 import {
   getRouteScriptAssets,
   getRouteStylesheetAssets,
@@ -8,12 +8,14 @@ import {
   syncCurrentRouteStylesheets,
   type BootstrapState,
 } from "../../src/runtime/client/navigation.ts";
+import { createRouterRequestHeaders } from "../../src/runtime/shared/router-protocol.ts";
 import {
   FakeNavigationApi,
   createFakeBrowser,
   flushTasks,
   stubFakeBrowserGlobals,
 } from "./test-helpers/fake-browser.ts";
+import { createManifest, createRoute } from "./test-helpers/manifest-fixtures.ts";
 
 describe("client navigation helpers", () => {
   afterEach(() => {
@@ -76,9 +78,7 @@ describe("client navigation helpers", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(new URL("http://example.com/guides"), {
       cache: "no-store",
-      headers: {
-        "X-Elemental-Router": "true",
-      },
+      headers: createRouterRequestHeaders(),
     });
     expect(browser.window.location.reloadCalls).toBe(1);
   });
@@ -111,9 +111,7 @@ describe("client navigation helpers", () => {
     await flushTasks();
 
     expect(fetchMock).toHaveBeenCalledWith(new URL("http://example.com/about"), {
-      headers: {
-        "X-Elemental-Router": "true",
-      },
+      headers: createRouterRequestHeaders(),
     });
     expect(browser.window.location.reloadCalls).toBe(1);
   });
@@ -151,12 +149,16 @@ describe("client navigation helpers", () => {
   it("reads script and stylesheet assets from current and legacy manifest keys", () => {
     const browser = createFakeBrowser();
     const modernRoute = createRoute("/modern", {
-      css: ["assets/modern.css"],
-      js: ["assets/modern.js"],
+      assets: {
+        css: ["assets/modern.css"],
+        js: ["assets/modern.js"],
+      },
     });
     const legacyRoute = createRoute("/legacy", {
-      layoutCss: ["assets/legacy.css"],
-      scripts: ["assets/legacy.js"],
+      assets: {
+        layoutCss: ["assets/legacy.css"],
+        scripts: ["assets/legacy.js"],
+      },
     });
 
     stubFakeBrowserGlobals(browser);
@@ -178,15 +180,6 @@ function createBootstrapState(manifest: BuildManifest): BootstrapState {
   };
 }
 
-function createManifest(routes: BuildManifestRoute[]): BuildManifest {
-  return {
-    appDir: "app/src",
-    assets: {},
-    generatedAt: "2026-04-16T00:00:00.000Z",
-    routes,
-  };
-}
-
 function createMouseEvent(target: unknown, preventDefault: () => void) {
   return {
     altKey: false,
@@ -197,33 +190,5 @@ function createMouseEvent(target: unknown, preventDefault: () => void) {
     preventDefault,
     shiftKey: false,
     target,
-  };
-}
-
-function createRoute(
-  pattern: string,
-  assets: BuildManifestRoute["assets"] = {
-    layoutCss: [],
-    scripts: [],
-  },
-): BuildManifestRoute {
-  return {
-    assets,
-    browser: {
-      errorBoundaries: [],
-      layouts: [],
-      route: "assets/route.js",
-    },
-    errorBoundaries: [],
-    layoutStylesheets: [],
-    layouts: [],
-    pattern,
-    server: {
-      layouts: [],
-      route: "server/route.js",
-      serverErrorBoundaries: [],
-    },
-    source: `app/src${pattern === "/" ? "/index.ts" : `${pattern}/index.ts`}`,
-    serverErrorBoundaries: [],
   };
 }

@@ -1,15 +1,21 @@
 import { html, renderToString } from "elemental";
 import { describe, expect, it } from "vitest";
-import type { BuildManifest, BuildManifestRoute } from "../../src/build/manifest.ts";
 import { composeAssetHead, createResolvedAssets } from "../../src/runtime/server/assets.ts";
+import { createManifest, createRoute } from "./test-helpers/manifest-fixtures.ts";
 
 describe("server asset helpers", () => {
   it("resolves current manifest asset keys and prepends the client entry", () => {
     const assets = createResolvedAssets(
-      createManifest("assets/client.js"),
+      createManifest([], {
+        assets: {
+          clientEntry: "assets/client.js",
+        },
+      }),
       createRoute({
-        css: ["assets/route.css"],
-        js: ["assets/route.js"],
+        assets: {
+          css: ["assets/route.css"],
+          js: ["assets/route.js"],
+        },
       }),
     );
 
@@ -23,8 +29,10 @@ describe("server asset helpers", () => {
     const assets = createResolvedAssets(
       createManifest(),
       createRoute({
-        layoutCss: ["assets/layout.css"],
-        scripts: ["assets/legacy-route.js"],
+        assets: {
+          layoutCss: ["assets/layout.css"],
+          scripts: ["assets/legacy-route.js"],
+        },
       }),
     );
 
@@ -52,36 +60,3 @@ describe("server asset helpers", () => {
     );
   });
 });
-
-function createManifest(clientEntry?: string): BuildManifest {
-  return {
-    appDir: "app/src",
-    assets: {
-      clientEntry,
-    },
-    generatedAt: "2026-04-16T00:00:00.000Z",
-    routes: [],
-  };
-}
-
-function createRoute(assets: BuildManifestRoute["assets"]): BuildManifestRoute {
-  return {
-    assets,
-    browser: {
-      errorBoundaries: [],
-      layouts: [],
-      route: "assets/route.js",
-    },
-    errorBoundaries: [],
-    layoutStylesheets: [],
-    layouts: [],
-    pattern: "/",
-    server: {
-      layouts: [],
-      route: "server/route.js",
-      serverErrorBoundaries: [],
-    },
-    source: "app/src/index.ts",
-    serverErrorBoundaries: [],
-  };
-}

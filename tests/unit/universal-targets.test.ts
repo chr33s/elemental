@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { buildProject } from "../../src/build/index.ts";
+import { writeRouteModule } from "./test-helpers/app-fixture.ts";
 
 const rootDir = fileURLToPath(new URL("../../", import.meta.url));
 const temporaryPaths = new Set<string>();
@@ -182,14 +183,3 @@ export async function loader() {
     ).rejects.toThrow(/must not import Node builtin/u);
   });
 });
-
-async function writeRouteModule(
-  appDir: string,
-  relativeFilePath: string,
-  sourceText: string,
-): Promise<void> {
-  const filePath = path.join(appDir, relativeFilePath);
-
-  await mkdir(path.dirname(filePath), { recursive: true });
-  await writeFile(filePath, sourceText, "utf8");
-}

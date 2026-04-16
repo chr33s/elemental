@@ -9,10 +9,15 @@ export function htmlResponse(body: HtmlRenderable, status = 200): Response {
   });
 }
 
-export function textResponse(body: string, status: number): Response {
+export function textResponse(
+  body: string,
+  status: number,
+  extraHeaders?: Record<string, string>,
+): Response {
   return new Response(body, {
     headers: {
       "content-type": "text/plain; charset=utf-8",
+      ...extraHeaders,
     },
     status,
   });

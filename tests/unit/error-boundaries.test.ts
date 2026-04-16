@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { BuildManifest, BuildManifestRoute } from "../../src/build/manifest.ts";
 import {
   resolveNearestBrowserErrorBoundaryForPathname,
   resolveNearestBrowserErrorBoundaryForRoute,
   resolveNearestServerErrorBoundaryForPathname,
 } from "../../src/runtime/shared/error-boundaries.ts";
+import { createManifest, createRoute } from "./test-helpers/manifest-fixtures.ts";
 
 describe("error boundary resolution", () => {
   it("resolves pathname lookups through the nearest dynamic browser boundary", () => {
@@ -101,44 +101,3 @@ describe("error boundary resolution", () => {
     });
   });
 });
-
-function createManifest(routes: BuildManifestRoute[]): BuildManifest {
-  return {
-    appDir: "app/src",
-    assets: {},
-    generatedAt: "2026-04-16T00:00:00.000Z",
-    routes,
-  };
-}
-
-function createRoute(options: {
-  browserBoundaryModules?: string[];
-  browserBoundarySources?: string[];
-  pattern?: string;
-  serverBoundaryModules?: string[];
-  serverBoundarySources?: string[];
-  source?: string;
-}): BuildManifestRoute {
-  return {
-    assets: {
-      layoutCss: [],
-      scripts: [],
-    },
-    browser: {
-      errorBoundaries: options.browserBoundaryModules ?? [],
-      layouts: [],
-      route: "assets/route.js",
-    },
-    errorBoundaries: options.browserBoundarySources ?? [],
-    layoutStylesheets: [],
-    layouts: [],
-    pattern: options.pattern ?? "/blog/:slug",
-    server: {
-      layouts: [],
-      route: "server/route.js",
-      serverErrorBoundaries: options.serverBoundaryModules ?? [],
-    },
-    source: options.source ?? "app/src/blog/[slug]/index.ts",
-    serverErrorBoundaries: options.serverBoundarySources ?? [],
-  };
-}

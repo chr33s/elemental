@@ -4,6 +4,7 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import type { BuildManifest } from "../../build/manifest.ts";
+import { textResponse } from "../shared/responses.ts";
 import {
   handleElementalRequestWithRuntime,
   type RouterPayload,
@@ -103,12 +104,7 @@ async function serveAssetFromFileSystem(
   const normalizedRelativePath = path.relative(distDir, filePath);
 
   if (normalizedRelativePath.startsWith("..") || path.isAbsolute(normalizedRelativePath)) {
-    return new Response("Forbidden", {
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-      },
-      status: 403,
-    });
+    return textResponse("Forbidden", 403);
   }
 
   try {
@@ -120,12 +116,7 @@ async function serveAssetFromFileSystem(
       status: 200,
     });
   } catch {
-    return new Response("Asset not found", {
-      headers: {
-        "content-type": "text/plain; charset=utf-8",
-      },
-      status: 404,
-    });
+    return textResponse("Asset not found", 404);
   }
 }
 

@@ -1,11 +1,14 @@
 import { html } from "elemental";
 import { describe, expect, it, vi } from "vitest";
-import type { BuildManifest, BuildManifestRoute } from "../../src/build/manifest.ts";
 import {
   recoverFromClientError,
   renderClientErrorBoundary,
 } from "../../src/runtime/client/errors.ts";
 import type { ClientErrorProps } from "../../src/runtime/shared/types.ts";
+import {
+  createManifest as createBaseManifest,
+  createRoute,
+} from "./test-helpers/manifest-fixtures.ts";
 
 describe("client error recovery helpers", () => {
   it("renders the nearest matched-route browser boundary and updates head after outlet", async () => {
@@ -152,43 +155,11 @@ describe("client error recovery helpers", () => {
   });
 });
 
-function createManifest(routes: BuildManifestRoute[]): BuildManifest {
-  return {
-    appDir: "app/src",
+function createManifest(routes: ReturnType<typeof createBaseManifest>["routes"]) {
+  return createBaseManifest(routes, {
     assets: {
       clientEntry: "assets/client.js",
     },
     generatedAt: "2026-04-12T00:00:00.000Z",
-    routes,
-  };
-}
-
-function createRoute(options: {
-  browserBoundaryModules: string[];
-  browserBoundarySources: string[];
-  pattern: string;
-  source: string;
-}): BuildManifestRoute {
-  return {
-    assets: {
-      layoutCss: [],
-      scripts: [],
-    },
-    browser: {
-      errorBoundaries: options.browserBoundaryModules,
-      layouts: [],
-      route: "assets/route.js",
-    },
-    errorBoundaries: options.browserBoundarySources,
-    layoutStylesheets: [],
-    layouts: [],
-    pattern: options.pattern,
-    server: {
-      layouts: [],
-      route: "server/route.js",
-      serverErrorBoundaries: [],
-    },
-    serverErrorBoundaries: [],
-    source: options.source,
-  };
+  });
 }

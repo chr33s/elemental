@@ -1,8 +1,18 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { build as esbuild } from "esbuild";
-import { discoverRoutes, type DiscoveredRoute } from "./discover.ts";
+import { toPosixPath } from "../shared/path-utils.ts";
+import { discoverRoutes } from "./discover.ts";
+import {
+  collectBrowserModulePaths,
+  collectEntryOutputs,
+  collectServerModulePaths,
+  createEntryPointMap,
+  createServerModuleIdMap,
+  requireEntryOutput,
+} from "./entry-points.ts";
+import { emitLayoutStylesheetAssets } from "./layout-stylesheets.ts";
+import { createManifestRoute, createWorkerManifest } from "./manifest-routes.ts";
 import { type BuildManifest, writeManifest } from "./manifest.ts";
 import { createCssModulePlugin } from "./plugins/css.ts";
 import {
@@ -10,6 +20,12 @@ import {
   createWorkerRuntimeValidationPlugin,
 } from "./plugins/server-boundary.ts";
 import { createServerBundleTransformPlugin } from "./plugins/strip-custom-elements.ts";
+import {
+  createServerEntry,
+  createSrvxEntry,
+  createWorkerEntry,
+  writeWranglerConfig,
+} from "./virtual-entrypoints.ts";
 
 export interface BuildOptions {
   appDir?: string;
@@ -146,7 +162,6 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
       createManifestRoute({
         browserOutputs,
         layoutStylesheetAssets,
-        outDir,
         rootDir,
         route,
         serverOutputs,
@@ -262,88 +277,6 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
   };
 }
 
-function createManifestRoute(options: {
-  browserOutputs: Map<string, string>;
-  layoutStylesheetAssets: Map<string, string>;
-  outDir: string;
-  rootDir: string;
-  route: DiscoveredRoute;
-  serverOutputs: Map<string, string>;
-}) {
-  const { browserOutputs, layoutStylesheetAssets, rootDir, route, serverOutputs } = options;
-  const browserLayouts = route.layouts.map((filePath) =>
-    requireEntryOutput(browserOutputs, filePath, `browser layout module ${filePath}`),
-  );
-  const browserErrorBoundaries = route.errorBoundaries.map((filePath) =>
-    requireEntryOutput(browserOutputs, filePath, `browser error boundary ${filePath}`),
-  );
-  const browserRoute = requireEntryOutput(
-    browserOutputs,
-    route.filePath,
-    `browser route ${route.filePath}`,
-  );
-  const serverLayouts = route.layouts.map((filePath) =>
-    requireEntryOutput(serverOutputs, filePath, `server layout module ${filePath}`),
-  );
-  const serverRoute = requireEntryOutput(
-    serverOutputs,
-    route.filePath,
-    `server route ${route.filePath}`,
-  );
-  const layoutCssAssets = route.layoutStylesheets.map((filePath) => {
-    const assetPath = layoutStylesheetAssets.get(path.resolve(filePath));
-
-    if (assetPath === undefined) {
-      throw new Error(`Missing emitted layout stylesheet for ${filePath}`);
-    }
-
-    return assetPath;
-  });
-
-  return {
-    assets: {
-      css: layoutCssAssets,
-      js: [...browserLayouts, ...browserErrorBoundaries, browserRoute],
-      layoutCss: layoutCssAssets,
-      scripts: [...browserLayouts, ...browserErrorBoundaries, browserRoute],
-    },
-    browser: {
-      errorBoundaries: browserErrorBoundaries,
-      layouts: browserLayouts,
-      route: browserRoute,
-    },
-    errorBoundaries: route.errorBoundaries.map((filePath) =>
-      toPosixPath(path.relative(rootDir, filePath)),
-    ),
-    layoutStylesheets: route.layoutStylesheets.map((filePath) =>
-      toPosixPath(path.relative(rootDir, filePath)),
-    ),
-    layouts: route.layouts.map((filePath) => toPosixPath(path.relative(rootDir, filePath))),
-    pattern: route.pattern,
-    server: {
-      layouts: serverLayouts,
-      route: serverRoute,
-      routeServer: route.serverFilePath
-        ? requireEntryOutput(
-            serverOutputs,
-            route.serverFilePath,
-            `route server module ${route.serverFilePath}`,
-          )
-        : undefined,
-      serverErrorBoundaries: route.serverErrorBoundaries.map((filePath) =>
-        requireEntryOutput(serverOutputs, filePath, `server error boundary ${filePath}`),
-      ),
-    },
-    serverErrorBoundaries: route.serverErrorBoundaries.map((filePath) =>
-      toPosixPath(path.relative(rootDir, filePath)),
-    ),
-    serverSource: route.serverFilePath
-      ? toPosixPath(path.relative(rootDir, route.serverFilePath))
-      : undefined,
-    source: toPosixPath(path.relative(rootDir, route.filePath)),
-  };
-}
-
 async function buildPackageEntrypoints(
   packageEntryPath: string,
   cliEntryPath: string,
@@ -374,266 +307,4 @@ async function buildPackageEntrypoints(
     target: ["node24"],
     write: true,
   });
-}
-
-async function emitLayoutStylesheetAssets(
-  routes: DiscoveredRoute[],
-  assetsDir: string,
-  appDir: string,
-  outDir: string,
-): Promise<Map<string, string>> {
-  const emittedAssets = new Map<string, string>();
-
-  for (const filePath of collectUniquePaths(routes.flatMap((route) => route.layoutStylesheets))) {
-    const sourceText = await readFile(filePath, "utf8");
-    const relativePath = toPosixPath(path.relative(appDir, filePath));
-    const sourceHash = createHash("sha256").update(sourceText).digest("hex").slice(0, 8);
-    const fileName = `${slugifyFileStem(relativePath)}-${sourceHash}.css`;
-    const outputPath = path.join(assetsDir, fileName);
-
-    await writeFile(outputPath, sourceText, "utf8");
-    emittedAssets.set(path.resolve(filePath), toPosixPath(path.relative(outDir, outputPath)));
-  }
-
-  return emittedAssets;
-}
-
-function collectBrowserModulePaths(routes: DiscoveredRoute[]): string[] {
-  return collectUniquePaths(
-    routes.flatMap((route) => [route.filePath, ...route.layouts, ...route.errorBoundaries]),
-  );
-}
-
-function collectServerModulePaths(routes: DiscoveredRoute[]): string[] {
-  return collectUniquePaths(
-    routes.flatMap((route) => [
-      route.filePath,
-      ...route.layouts,
-      ...route.serverErrorBoundaries,
-      ...(route.serverFilePath === undefined ? [] : [route.serverFilePath]),
-    ]),
-  );
-}
-
-function collectUniquePaths(filePaths: string[]): string[] {
-  return [...new Set(filePaths.map((filePath) => path.resolve(filePath)))].sort((left, right) =>
-    left.localeCompare(right),
-  );
-}
-
-function createEntryPointMap(filePaths: string[], rootDir: string): Record<string, string> {
-  return Object.fromEntries(
-    filePaths.map((filePath) => [createEntryName(filePath, rootDir), path.resolve(filePath)]),
-  );
-}
-
-function createEntryName(filePath: string, rootDir: string): string {
-  const relativePath = toPosixPath(path.relative(rootDir, filePath));
-  const sourceHash = createHash("sha256").update(relativePath).digest("hex").slice(0, 8);
-
-  return `${slugifyFileStem(relativePath)}-${sourceHash}`;
-}
-
-function slugifyFileStem(filePath: string): string {
-  const extension = path.extname(filePath);
-  const fileStem = filePath.slice(0, extension.length === 0 ? filePath.length : -extension.length);
-  const slug = fileStem
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase();
-
-  return slug.length === 0 ? "entry" : slug;
-}
-
-function collectEntryOutputs(
-  outputs: Record<string, { entryPoint?: string }>,
-  outDir: string,
-  workingDir: string,
-): Map<string, string> {
-  const entryOutputs = new Map<string, string>();
-
-  for (const [outputPath, outputInfo] of Object.entries(outputs)) {
-    if (outputInfo.entryPoint === undefined || !outputPath.endsWith(".js")) {
-      continue;
-    }
-
-    const absoluteOutputPath = path.resolve(workingDir, outputPath);
-
-    entryOutputs.set(
-      path.resolve(workingDir, outputInfo.entryPoint),
-      toPosixPath(path.relative(outDir, absoluteOutputPath)),
-    );
-  }
-
-  return entryOutputs;
-}
-
-function requireEntryOutput(
-  outputs: Map<string, string>,
-  filePath: string,
-  description: string,
-): string {
-  const outputPath = outputs.get(path.resolve(filePath));
-
-  if (outputPath === undefined) {
-    throw new Error(`Missing emitted asset for ${description}`);
-  }
-
-  return outputPath;
-}
-
-function createServerEntry(options: {
-  distDir: string;
-  manifest: BuildManifest;
-  serverAppPath: string;
-}): string {
-  return [
-    `import { startServer } from ${JSON.stringify(options.serverAppPath)};`,
-    "",
-    "startServer({",
-    `  distDir: ${JSON.stringify(options.distDir)},`,
-    `  manifest: ${JSON.stringify(options.manifest, null, 2)},`,
-    "});",
-    "",
-  ].join("\n");
-}
-
-function createSrvxEntry(options: {
-  distDir: string;
-  manifest: BuildManifest;
-  serverAppPath: string;
-}): string {
-  return [
-    `import { createSrvxHandler } from ${JSON.stringify(options.serverAppPath)};`,
-    "",
-    "export default createSrvxHandler({",
-    `  distDir: ${JSON.stringify(options.distDir)},`,
-    `  manifest: ${JSON.stringify(options.manifest, null, 2)},`,
-    "});",
-    "",
-  ].join("\n");
-}
-
-function createWorkerEntry(options: {
-  manifest: BuildManifest;
-  moduleIdByFilePath: Map<string, string>;
-  modulePaths: string[];
-  workerServerPath: string;
-}): string {
-  const importLines = [
-    `import { createWorkerHandler } from ${JSON.stringify(options.workerServerPath)};`,
-  ];
-  const registryEntries: string[] = [];
-
-  options.modulePaths.forEach((modulePath, index) => {
-    const variableName = `serverModule${index}`;
-    const moduleId = options.moduleIdByFilePath.get(path.resolve(modulePath));
-
-    if (moduleId === undefined) {
-      throw new Error(`Missing worker module id for ${modulePath}`);
-    }
-
-    importLines.push(
-      `import * as ${variableName} from ${JSON.stringify(path.resolve(modulePath))};`,
-    );
-    registryEntries.push(`  ${JSON.stringify(moduleId)}: ${variableName},`);
-  });
-
-  return [
-    ...importLines,
-    "",
-    "export default createWorkerHandler({",
-    `  manifest: ${JSON.stringify(options.manifest, null, 2)},`,
-    "  modules: {",
-    ...registryEntries,
-    "  },",
-    "});",
-    "",
-  ].join("\n");
-}
-
-function createWorkerManifest(
-  manifest: BuildManifest,
-  routes: DiscoveredRoute[],
-  rootDir: string,
-  moduleIdByFilePath: Map<string, string>,
-): BuildManifest {
-  return {
-    ...manifest,
-    routes: manifest.routes.map((route, index) => {
-      const discoveredRoute = routes[index];
-
-      return {
-        ...route,
-        server: {
-          layouts: discoveredRoute.layouts.map((filePath) =>
-            requireServerModuleId(moduleIdByFilePath, filePath, rootDir),
-          ),
-          route: requireServerModuleId(moduleIdByFilePath, discoveredRoute.filePath, rootDir),
-          routeServer:
-            discoveredRoute.serverFilePath === undefined
-              ? undefined
-              : requireServerModuleId(moduleIdByFilePath, discoveredRoute.serverFilePath, rootDir),
-          serverErrorBoundaries: discoveredRoute.serverErrorBoundaries.map((filePath) =>
-            requireServerModuleId(moduleIdByFilePath, filePath, rootDir),
-          ),
-        },
-      };
-    }),
-  };
-}
-
-function createServerModuleIdMap(filePaths: string[], rootDir: string): Map<string, string> {
-  return new Map(
-    filePaths.map((filePath) => [path.resolve(filePath), createServerModuleId(filePath, rootDir)]),
-  );
-}
-
-function createServerModuleId(filePath: string, rootDir: string): string {
-  return `server:${toPosixPath(path.relative(rootDir, filePath))}`;
-}
-
-function requireServerModuleId(
-  moduleIdByFilePath: Map<string, string>,
-  filePath: string,
-  rootDir: string,
-): string {
-  const moduleId = moduleIdByFilePath.get(path.resolve(filePath));
-
-  if (moduleId === undefined) {
-    throw new Error(
-      `Missing server module id for ${toPosixPath(path.relative(rootDir, filePath))}`,
-    );
-  }
-
-  return moduleId;
-}
-
-async function writeWranglerConfig(outDir: string, generatedAt: string): Promise<string> {
-  const wranglerConfigFile = path.join(outDir, "wrangler.jsonc");
-  const compatibilityDate = generatedAt.slice(0, 10);
-
-  await writeFile(
-    wranglerConfigFile,
-    [
-      "{",
-      '  "name": "elemental-worker",',
-      '  "main": "./worker.js",',
-      `  "compatibility_date": ${JSON.stringify(compatibilityDate)},`,
-      '  "assets": {',
-      '    "directory": ".",',
-      '    "binding": "ASSETS",',
-      '    "run_worker_first": true',
-      "  }",
-      "}",
-      "",
-    ].join("\n"),
-    "utf8",
-  );
-
-  return wranglerConfigFile;
-}
-
-function toPosixPath(value: string): string {
-  return value.split(path.sep).join("/");
 }

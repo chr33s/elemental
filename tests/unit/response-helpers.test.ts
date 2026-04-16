@@ -1,11 +1,11 @@
 import { safeHtml } from "elemental";
 import { describe, expect, it } from "vitest";
 import type { RouterPayload } from "../../src/runtime/server/app.ts";
+import { htmlResponse, textResponse } from "../../src/runtime/shared/responses.ts";
 import {
   createRouterPayloadResponse,
   isRouterRequest,
-} from "../../src/runtime/server/render-partial.ts";
-import { htmlResponse, textResponse } from "../../src/runtime/shared/responses.ts";
+} from "../../src/runtime/shared/router-protocol.ts";
 
 describe("response helpers", () => {
   it("creates HTML responses with the expected content type and default status", async () => {

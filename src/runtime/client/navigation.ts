@@ -1,6 +1,8 @@
 import type { BuildManifest } from "../../build/manifest.ts";
-import type { RouterPayload } from "../server/app.ts";
+import { normalizeManifestRouteAssets } from "../shared/manifest-assets.ts";
+import { createRouterRequestHeaders, isRouterPayloadResponse } from "../shared/router-protocol.ts";
 import { matchManifestRoute, type MatchedManifestRoute } from "../shared/routes.ts";
+import type { RouterPayload } from "../shared/types.ts";
 import { recoverFromClientError } from "./errors.ts";
 import { createFormSubmission, type FormNavigationSubmission } from "./forms.ts";
 import { normalizeAssetHref, renderManagedHead, syncManagedStylesheets } from "./head.ts";
@@ -36,8 +38,6 @@ interface ElementalNavigateEvent extends Event {
 interface ViewTransitionLike {
   finished: Promise<void>;
 }
-
-const ROUTER_HEADER_NAME = "X-Elemental-Router";
 
 export function installNavigationInterceptors(state: BootstrapState): void {
   const navigationApi = getNavigationApi();
@@ -114,9 +114,7 @@ export async function refreshCurrentRoute(state: BootstrapState): Promise<void> 
   const currentUrl = new URL(window.location.href);
   const response = await fetch(currentUrl, {
     cache: "no-store",
-    headers: {
-      [ROUTER_HEADER_NAME]: "true",
-    },
+    headers: createRouterRequestHeaders(),
   });
 
   if (!isRouterPayloadResponse(response)) {
@@ -176,13 +174,11 @@ export async function loadScriptModules(
 }
 
 export function getRouteScriptAssets(route: MatchedManifestRoute["route"]): string[] {
-  return route.assets.js ?? route.assets.scripts ?? [];
+  return normalizeManifestRouteAssets(route).js;
 }
 
 export function getRouteStylesheetAssets(route: MatchedManifestRoute["route"]): string[] {
-  return (route.assets.css ?? route.assets.layoutCss ?? []).map((assetPath) =>
-    normalizeAssetHref(assetPath),
-  );
+  return normalizeManifestRouteAssets(route).css.map((assetPath) => normalizeAssetHref(assetPath));
 }
 
 async function submitFormNavigation(
@@ -190,13 +186,9 @@ async function submitFormNavigation(
   url: URL,
   options: FormNavigationSubmission,
 ): Promise<void> {
-  const headers = new Headers(options.headers);
-
-  headers.set(ROUTER_HEADER_NAME, "true");
-
   const response = await fetch(url, {
     body: options.body,
-    headers,
+    headers: createRouterRequestHeaders(options.headers),
     method: options.method,
   });
 
@@ -230,9 +222,7 @@ async function navigate(
 
   try {
     const response = await fetch(url, {
-      headers: {
-        [ROUTER_HEADER_NAME]: "true",
-      },
+      headers: createRouterRequestHeaders(),
     });
 
     if (!isRouterPayloadResponse(response)) {
@@ -450,8 +440,4 @@ function isHashOnlyNavigation(url: URL): boolean {
     url.search === window.location.search &&
     url.hash !== window.location.hash
   );
-}
-
-function isRouterPayloadResponse(response: Response): boolean {
-  return response.headers.get("content-type")?.includes("application/json") === true;
 }

@@ -1,4 +1,5 @@
 import type { BuildManifestRoute } from "../../build/manifest.ts";
+import { splitPathSegments } from "../../shared/path-utils.ts";
 import type { RouteParams } from "./types.ts";
 
 export interface MatchedManifestRoute {
@@ -74,15 +75,4 @@ export function matchRoutePattern(
   }
 
   return pathnameIndex === pathnameSegments.length ? params : undefined;
-}
-
-export function splitPathSegments(pathname: string): string[] {
-  if (pathname === "/") {
-    return [];
-  }
-
-  return pathname
-    .split("/")
-    .filter((segment) => segment.length > 0)
-    .map((segment) => decodeURIComponent(segment));
 }
