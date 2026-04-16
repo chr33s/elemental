@@ -11,7 +11,8 @@ export function injectDevClientScript(documentMarkup: string, devClientHref: str
     return documentMarkup;
   }
 
-  const scriptTag = `<script ${DEV_CLIENT_SENTINEL}="true" type="module" src="${devClientHref}"></script>`;
+  const escapedHref = devClientHref.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
+  const scriptTag = `<script ${DEV_CLIENT_SENTINEL}="true" type="module" src="${escapedHref}"></script>`;
 
   if (documentMarkup.includes("</head>")) {
     return documentMarkup.replace("</head>", `${scriptTag}</head>`);

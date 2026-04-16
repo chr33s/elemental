@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createPublicManifest } from "../../src/build/manifest.ts";
 import {
   resolveNearestBrowserErrorBoundaryForPathname,
   resolveNearestBrowserErrorBoundaryForRoute,
@@ -9,14 +10,16 @@ import { createManifest, createRoute } from "./test-helpers/manifest-fixtures.ts
 describe("error boundary resolution", () => {
   it("resolves pathname lookups through the nearest dynamic browser boundary", () => {
     const boundary = resolveNearestBrowserErrorBoundaryForPathname(
-      createManifest([
-        createRoute({
-          browserBoundaryModules: ["assets/root-error.js", "assets/blog-slug-error.js"],
-          browserBoundarySources: ["app/src/error.ts", "app/src/blog/[slug]/error.ts"],
-          pattern: "/blog/:slug/comments",
-          source: "app/src/blog/[slug]/comments/index.ts",
-        }),
-      ]),
+      createPublicManifest(
+        createManifest([
+          createRoute({
+            browserBoundaryModules: ["assets/root-error.js", "assets/blog-slug-error.js"],
+            browserBoundarySources: ["app/src/error.ts", "app/src/blog/[slug]/error.ts"],
+            pattern: "/blog/:slug/comments",
+            source: "app/src/blog/[slug]/comments/index.ts",
+          }),
+        ]),
+      ),
       "/blog/alpha/missing",
     );
 
@@ -79,17 +82,19 @@ describe("error boundary resolution", () => {
   });
 
   it("uses the last aligned boundary pair for route-based lookups", () => {
-    const boundary = resolveNearestBrowserErrorBoundaryForRoute(
-      createRoute({
-        browserBoundaryModules: ["assets/root-error.js"],
-        browserBoundarySources: ["app/src/error.ts", "app/src/blog/error.ts"],
-        pattern: "/blog/:slug",
-        source: "app/src/blog/[slug]/index.ts",
-      }),
-      {
-        slug: "alpha",
-      },
+    const manifest = createPublicManifest(
+      createManifest([
+        createRoute({
+          browserBoundaryModules: ["assets/root-error.js"],
+          browserBoundarySources: ["app/src/error.ts", "app/src/blog/error.ts"],
+          pattern: "/blog/:slug",
+          source: "app/src/blog/[slug]/index.ts",
+        }),
+      ]),
     );
+    const boundary = resolveNearestBrowserErrorBoundaryForRoute(manifest.routes[0]!, {
+      slug: "alpha",
+    });
 
     expect(boundary).toEqual({
       directoryPath: "app/src",

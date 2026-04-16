@@ -1,7 +1,7 @@
 import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
 import {
-  resolveNearestErrorBoundaryForPathname,
-  resolveNearestErrorBoundaryForRoute,
+  resolveNearestServerErrorBoundaryForRoute,
+  resolveNearestServerErrorBoundaryForPathname,
 } from "../shared/error-boundaries.ts";
 import { loadErrorBoundaryModule } from "../shared/error-boundary-modules.ts";
 import { html } from "../shared/html.ts";
@@ -27,11 +27,10 @@ export async function renderServerErrorResponse(options: {
   const url = new URL(options.request.url);
   const resolvedBoundary =
     options.matchedRoute === undefined
-      ? resolveNearestErrorBoundaryForPathname(options.manifest, url.pathname, "server")
-      : resolveNearestErrorBoundaryForRoute(
+      ? resolveNearestServerErrorBoundaryForPathname(options.manifest, url.pathname)
+      : resolveNearestServerErrorBoundaryForRoute(
           options.matchedRoute.route,
           options.matchedRoute.params,
-          "server",
         );
 
   if (resolvedBoundary === undefined) {

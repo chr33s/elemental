@@ -8,7 +8,10 @@ import {
   syncCurrentRouteStylesheets,
   type BootstrapState,
 } from "../../src/runtime/client/navigation.ts";
-import { createRouterRequestHeaders } from "../../src/runtime/shared/router-protocol.ts";
+import {
+  createRouterPayloadResponse,
+  createRouterRequestHeaders,
+} from "../../src/runtime/shared/router-protocol.ts";
 import {
   FakeNavigationApi,
   createFakeBrowser,
@@ -91,6 +94,37 @@ describe("client navigation helpers", () => {
     await syncCurrentRouteStylesheets(createBootstrapState(createManifest([])));
 
     expect(browser.window.location.reloadCalls).toBe(1);
+  });
+
+  it("treats router outlet payloads as trusted html during refresh", async () => {
+    const browser = createFakeBrowser("http://example.com/guides");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      createRouterPayloadResponse({
+        assets: {
+          scripts: [],
+          stylesheets: [],
+        },
+        head: "",
+        outlet: '<img src="/x" onerror="alert(1)"><script>alert(1)</script>',
+        status: 200,
+      }),
+    );
+    const routeOutlet = browser.document.createElement("main");
+
+    routeOutlet.setAttribute("data-route-outlet", "");
+    browser.document.body.appendChild(routeOutlet);
+    stubFakeBrowserGlobals(browser);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await refreshCurrentRoute(createBootstrapState(createManifest([createRoute("/guides")])));
+
+    expect(fetchMock).toHaveBeenCalledWith(new URL("http://example.com/guides"), {
+      cache: "no-store",
+      headers: createRouterRequestHeaders(),
+    });
+    expect(routeOutlet.innerHTML).toBe(
+      '<img src="/x" onerror="alert(1)"><script>alert(1)</script>',
+    );
   });
 
   it("listens for popstate when the Navigation API is unavailable", async () => {

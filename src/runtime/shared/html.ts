@@ -123,7 +123,10 @@ export function cssText(value: string): CssTextValue {
 /**
  * Marks a string as trusted HTML that should bypass escaping.
  *
- * **Warning**: Only use with content you trust. Improper use can lead to XSS vulnerabilities.
+ * **Warning**: Only use with content you trust. No sanitization is performed.
+ * Values wrapped with `safeHtml()` can later flow into privileged client-side HTML
+ * sinks such as route outlet replacement and managed `<head>` updates.
+ * Improper use can therefore become a DOM XSS vulnerability.
  *
  * @example
  * ```ts

@@ -13,7 +13,7 @@ import {
 } from "./entry-points.ts";
 import { emitLayoutStylesheetAssets } from "./layout-stylesheets.ts";
 import { createManifestRoute, createWorkerManifest } from "./manifest-routes.ts";
-import { type BuildManifest, writeManifest } from "./manifest.ts";
+import { type BuildManifest } from "./manifest.ts";
 import { createCssModulePlugin } from "./plugins/css.ts";
 import {
   createBrowserServerBoundaryPlugin,
@@ -26,6 +26,7 @@ import {
   createWorkerEntry,
   writeWranglerConfig,
 } from "./virtual-entrypoints.ts";
+import { writeManifest } from "./write-manifest.ts";
 
 export interface BuildOptions {
   appDir?: string;

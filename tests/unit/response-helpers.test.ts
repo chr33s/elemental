@@ -13,6 +13,8 @@ describe("response helpers", () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
     expect(await response.text()).toBe("<main>Hello</main>");
   });
 
@@ -73,6 +75,7 @@ describe("response helpers", () => {
 
     expect(response.status).toBe(202);
     expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
     expect(response.headers.get("x-test")).toBe("router");
     expect(await response.json()).toEqual(payload);
   });

@@ -23,6 +23,7 @@ export function renderManagedHead(head: string): void {
   const range = document.createRange();
 
   range.selectNode(document.head);
+  // Security-sensitive sink: managed head markup is inserted as trusted HTML.
   end.before(range.createContextualFragment(head));
 }
 

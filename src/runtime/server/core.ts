@@ -1,4 +1,4 @@
-import type { BuildManifest } from "../../build/manifest.ts";
+import { createPublicManifest, type BuildManifest } from "../../build/manifest.ts";
 import { matchManifestRoute } from "../shared/routes.ts";
 import { reportRuntimeError, renderServerErrorResponse } from "./errors.ts";
 import { renderMatchedRoute } from "./routing.ts";
@@ -16,16 +16,30 @@ export interface ElementalRequestHandlerOptions {
   runtime: ServerRuntimeAdapter;
 }
 
+export function createRequestHandler(
+  options: ElementalRequestHandlerOptions,
+): (request: Request) => Promise<Response> {
+  const publicManifestJson = `${JSON.stringify(createPublicManifest(options.manifest), null, 2)}\n`;
+
+  return (request) => handleElementalRequestWithRuntime(request, options, publicManifestJson);
+}
+
 export async function handleElementalRequestWithRuntime(
   request: Request,
   options: ElementalRequestHandlerOptions,
+  publicManifestJson?: string,
 ): Promise<Response> {
   const url = new URL(request.url);
 
   if (url.pathname === "/manifest.json") {
-    return new Response(`${JSON.stringify(options.manifest, null, 2)}\n`, {
+    const body =
+      publicManifestJson ?? `${JSON.stringify(createPublicManifest(options.manifest), null, 2)}\n`;
+
+    return new Response(body, {
       headers: {
+        "cache-control": "no-store",
         "content-type": "application/json; charset=utf-8",
+        "x-content-type-options": "nosniff",
       },
       status: 200,
     });

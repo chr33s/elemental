@@ -1,7 +1,7 @@
-import type { BuildManifest } from "../../build/manifest.ts";
+import type { PublicBuildManifest } from "../../build/manifest.ts";
 import {
-  resolveNearestErrorBoundaryForPathname,
-  resolveNearestErrorBoundaryForRoute,
+  resolveNearestBrowserErrorBoundaryForPathname,
+  resolveNearestBrowserErrorBoundaryForRoute,
   type ResolvedErrorBoundary,
 } from "../shared/error-boundaries.ts";
 import { loadErrorBoundaryModule } from "../shared/error-boundary-modules.ts";
@@ -9,7 +9,7 @@ import { renderToString } from "../shared/html.ts";
 import type { MatchedManifestRoute } from "../shared/routes.ts";
 import type { ClientErrorProps } from "../shared/types.ts";
 
-export type MatchedClientRoute = MatchedManifestRoute;
+export type MatchedClientRoute = MatchedManifestRoute<PublicBuildManifest["routes"][number]>;
 
 export interface RenderedClientErrorBoundary {
   boundary: ResolvedErrorBoundary;
@@ -19,7 +19,7 @@ export interface RenderedClientErrorBoundary {
 
 export async function renderClientErrorBoundary(options: {
   error: unknown;
-  manifest: BuildManifest;
+  manifest: PublicBuildManifest;
   matchedRoute?: MatchedClientRoute;
   resolver: (modulePath: string) => Promise<unknown>;
   status?: number;
@@ -28,11 +28,10 @@ export async function renderClientErrorBoundary(options: {
 }): Promise<RenderedClientErrorBoundary | undefined> {
   const boundary =
     options.matchedRoute === undefined
-      ? resolveNearestErrorBoundaryForPathname(options.manifest, options.url.pathname, "browser")
-      : resolveNearestErrorBoundaryForRoute(
+      ? resolveNearestBrowserErrorBoundaryForPathname(options.manifest, options.url.pathname)
+      : resolveNearestBrowserErrorBoundaryForRoute(
           options.matchedRoute.route,
           options.matchedRoute.params,
-          "browser",
         );
 
   if (boundary === undefined) {
@@ -69,7 +68,7 @@ export async function recoverFromClientError(options: {
   error: unknown;
   fallback: () => void | Promise<void>;
   logger?: Pick<Console, "error">;
-  manifest: BuildManifest;
+  manifest: PublicBuildManifest;
   matchedRoute?: MatchedClientRoute;
   renderHead: (head: string) => void;
   renderOutlet: (outlet: string) => void;

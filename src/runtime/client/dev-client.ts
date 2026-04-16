@@ -1,4 +1,4 @@
-import type { BuildManifest } from "../../build/manifest.ts";
+import type { PublicBuildManifest } from "../../build/manifest.ts";
 import type { ElementalBrowserRuntimeApi } from "./bootstrap.ts";
 
 type DevUpdateMessage = {
@@ -23,7 +23,7 @@ function getRuntimeApi(): ElementalBrowserRuntimeApi | undefined {
   ).__elementalBrowserRuntime;
 }
 
-async function loadLatestManifest(): Promise<BuildManifest> {
+async function loadLatestManifest(): Promise<PublicBuildManifest> {
   const response = await fetch(`/manifest.json?ts=${Date.now()}`, {
     cache: "no-store",
     headers: {
@@ -37,7 +37,7 @@ async function loadLatestManifest(): Promise<BuildManifest> {
     );
   }
 
-  return (await response.json()) as BuildManifest;
+  return (await response.json()) as PublicBuildManifest;
 }
 
 async function handleDevUpdate(message: DevUpdateMessage): Promise<void> {

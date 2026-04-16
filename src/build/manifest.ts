@@ -1,6 +1,3 @@
-import { writeFile } from "node:fs/promises";
-import path from "node:path";
-
 export interface BuildManifestRoute {
   assets: {
     css?: string[];
@@ -37,10 +34,34 @@ export interface BuildManifest {
   routes: BuildManifestRoute[];
 }
 
-export async function writeManifest(outDir: string, manifest: BuildManifest): Promise<string> {
-  const manifestPath = path.join(outDir, "manifest.json");
+export interface PublicBuildManifestRoute {
+  assets: BuildManifestRoute["assets"];
+  browser: Pick<BuildManifestRoute["browser"], "errorBoundaries">;
+  errorBoundaries: string[];
+  pattern: string;
+}
 
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+export interface PublicBuildManifest {
+  appDir: string;
+  assets: BuildManifest["assets"];
+  generatedAt: string;
+  routes: PublicBuildManifestRoute[];
+}
 
-  return manifestPath;
+export function createPublicManifest(manifest: BuildManifest): PublicBuildManifest {
+  return {
+    appDir: manifest.appDir,
+    assets: {
+      clientEntry: manifest.assets.clientEntry,
+    },
+    generatedAt: manifest.generatedAt,
+    routes: manifest.routes.map((route) => ({
+      assets: route.assets,
+      browser: {
+        errorBoundaries: [...route.browser.errorBoundaries],
+      },
+      errorBoundaries: [...route.errorBoundaries],
+      pattern: route.pattern,
+    })),
+  };
 }

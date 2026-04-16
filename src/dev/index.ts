@@ -83,7 +83,7 @@ export async function startDevServer(options: StartDevServerOptions): Promise<vo
 
   await new Promise<void>((resolve, reject) => {
     proxyServer.once("error", reject);
-    proxyServer.listen(port, () => {
+    proxyServer.listen(port, "127.0.0.1", () => {
       console.log(`Elemental dev listening on http://127.0.0.1:${port}`);
       resolve();
     });

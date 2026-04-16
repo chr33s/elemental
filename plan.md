@@ -550,6 +550,55 @@ References:
 - https://developers.cloudflare.com/workers/wrangler/custom-builds/
 - https://developers.cloudflare.com/workers/static-assets/
 
+## Phase 14: Security Review
+
+Deliverables:
+
+- Documented trust model for HTML values through server rendering, partial payloads, head updates, and client navigation.
+- Lint-time guardrails against unsafe `safeHtml()` usage in route-facing modules.
+- Host header validation and canonical origin configuration for production Node deployments.
+- Hardened manifest-driven dynamic imports constrained to the built server tree.
+- Minimized runtime `/manifest.json` endpoint that omits server module paths and source metadata.
+- Secure default headers on all framework-emitted responses.
+- Dev proxy hop-by-hop header stripping.
+
+Tasks:
+
+- Document `safeHtml()` as a security-sensitive escape hatch in public docs and inline API docs.
+- Add regression tests for malicious payloads in route outlet rendering and managed head updates.
+- Add a custom Oxlint JS plugin rule `elemental/no-unsafe-safe-html` that flags direct `safeHtml()` in route, layout, and error boundary modules with reviewed inline suppression.
+- Add `ELEMENTAL_CANONICAL_ORIGIN` and `ELEMENTAL_ALLOWED_HOSTS` configuration to the Node runtime.
+- Validate host headers before constructing request URLs from inbound headers.
+- Constrain manifest-driven dynamic imports to `dist/server/` using path validation that rejects escapes.
+- Serve a `PublicBuildManifest` from the runtime `/manifest.json` endpoint instead of the full internal manifest.
+- Cache the pre-serialized public manifest JSON at handler creation time.
+- Add `X-Content-Type-Options: nosniff` to all asset, HTML, JSON, and error responses.
+- Add `Referrer-Policy: strict-origin-when-cross-origin` to HTML document responses.
+- Strip hop-by-hop headers (`connection`, `keep-alive`, `proxy-authorization`, `transfer-encoding`, `upgrade`, etc.) in the dev proxy before forwarding to the child server.
+
+Acceptance criteria:
+
+- Strings are HTML-escaped by default and `safeHtml()` is the only trusted bypass, documented as security-sensitive.
+- The Oxlint rule fails linting for direct `safeHtml()` calls in route modules unless explicitly suppressed.
+- Production Node deployments can use canonical origin and allowed host validation instead of trusting raw `Host` headers.
+- Dynamic imports fail closed when the module path resolves outside the server output tree.
+- The runtime `/manifest.json` endpoint exposes no server module paths or source file metadata.
+- All framework-emitted responses include `nosniff` and HTML documents include `referrer-policy`.
+- The dev proxy does not forward hop-by-hop headers to the child server.
+
+### Findings Not Requiring Code Changes
+
+| #   | Area                                     | Severity | Detail                                                                                                                                                                                                                                                                                                                                                                                                       |
+| --- | ---------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | XSS sinks                                | Info     | `renderRouteOutlet` (`innerHTML`) and `renderManagedHead` (`createContextualFragment`) are the two client-side privileged sinks. Both receive strings produced exclusively by the server's `html` tagged template, which auto-escapes by default. The chain is sound as long as `safeHtml()` usage is restricted — the existing oxlint rule already flags direct `safeHtml` in route/error-boundary modules. |
+| 2   | `replaceEntireDocument`                  | Low      | Uses `document.write()` for full-page fallback navigations. This is equivalent in trust to `location.assign()` since the fetch is always same-origin. No action needed.                                                                                                                                                                                                                                      |
+| 3   | Server module resolver                   | Info     | `resolveServerModulePath` rejects absolute paths, URI schemes, and paths that resolve outside `server/`. Worker resolver uses a pre-built module map. Both are sound.                                                                                                                                                                                                                                        |
+| 4   | Public manifest exposure                 | Low      | `/manifest.json` is served unconditionally and reveals all route patterns, asset paths, and error-boundary layout. Consider adding `Cache-Control: private` or gating behind an auth check in sensitive deployments, but this is standard for SSR frameworks.                                                                                                                                                |
+| 5   | No SRI on client assets                  | Info     | `<script>` and `<link>` tags emitted by `renderDocument` / `createManagedHead` lack `integrity` attributes. Adding SRI for hashed assets would protect against CDN/hosting tampering. Non-blocking.                                                                                                                                                                                                          |
+| 6   | Build artifact trust                     | Info     | The manifest is embedded inline in generated virtual entry files via `JSON.stringify`. This is standard — the build output directory is an implicit trust boundary. No action needed unless the project adds a remote asset fetching layer.                                                                                                                                                                  |
+| 7   | Dev SSE no auth                          | Low      | `/__elemental/dev/events` has no authentication, but with the dev proxy bound to localhost-only, the exposure surface is limited to local processes.                                                                                                                                                                                                                                                         |
+| 8   | Production `startServer` binds `0.0.0.0` | Info     | Unlike the dev server, the production `startServer` binds to all interfaces by default. This is expected for production, but the `allowedHosts` / `ELEMENTAL_ALLOWED_HOSTS` mechanism is available to restrict it.                                                                                                                                                                                           |
+
 ## Cross-Cutting Rules
 
 These rules should be enforced throughout the implementation:

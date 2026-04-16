@@ -19,7 +19,7 @@ describe("client head helpers", () => {
     vi.unstubAllGlobals();
   });
 
-  it("replaces managed head content between markers while preserving managed assets", () => {
+  it("treats managed head payloads as trusted html and replaces previous managed nodes", () => {
     const browser = createFakeBrowser();
 
     stubFakeBrowserGlobals(browser);
@@ -29,18 +29,19 @@ describe("client head helpers", () => {
     const end = createMeta(browser, ELEMENTAL_HEAD_END_NAME);
     const script = browser.document.createElement("script");
 
-    stale.setAttribute("name", "stale");
+    stale.setAttribute("data-stale", "true");
     script.setAttribute(ELEMENTAL_MANAGED_ATTRIBUTE, ELEMENTAL_MANAGED_SCRIPT);
     browser.document.head.appendChild(start);
     browser.document.head.appendChild(stale);
     browser.document.head.appendChild(end);
     browser.document.head.appendChild(script);
 
-    renderManagedHead("<title>Updated</title>");
+    renderManagedHead('<meta name="description" content="x"><script>alert(1)</script>');
 
+    expect(browser.document.head.querySelector('meta[data-stale="true"]')).toBeNull();
     expect(browser.document.head.childNodes.map(describeNode)).toEqual([
       `meta[content=,name=${ELEMENTAL_HEAD_START_NAME}]`,
-      "markup:<title>Updated</title>",
+      'markup:<meta name="description" content="x"><script>alert(1)</script>',
       `meta[content=,name=${ELEMENTAL_HEAD_END_NAME}]`,
       `script[data-elemental-managed=${ELEMENTAL_MANAGED_SCRIPT}]`,
     ]);

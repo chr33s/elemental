@@ -10,6 +10,14 @@ describe("html", () => {
     );
   });
 
+  it("renders safeHtml values verbatim even when the markup is dangerous", () => {
+    const dangerousMarkup = '<img src="/x" onerror="alert(1)"><script>alert(1)</script>';
+
+    expect(renderToString(html`<div>${safeHtml(dangerousMarkup)}</div>`)).toBe(
+      `<div>${dangerousMarkup}</div>`,
+    );
+  });
+
   it("flattens arrays, ignores empty values, and stringifies primitives", () => {
     const items = [
       html`<li>${0}</li>`,

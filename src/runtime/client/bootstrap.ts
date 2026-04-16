@@ -1,4 +1,4 @@
-import type { BuildManifest } from "../../build/manifest.ts";
+import type { PublicBuildManifest } from "../../build/manifest.ts";
 import { ELEMENTAL_MANIFEST_PATH } from "../shared/browser-runtime.ts";
 import { matchManifestRoute } from "../shared/routes.ts";
 import {
@@ -17,7 +17,7 @@ export {
 
 export interface ElementalBrowserRuntimeApi {
   refreshCurrentRoute(): Promise<void>;
-  replaceManifest(manifest: BuildManifest): void;
+  replaceManifest(manifest: PublicBuildManifest): void;
   syncCurrentRouteStylesheets(): Promise<void>;
 }
 
@@ -34,7 +34,7 @@ async function bootstrap(): Promise<void> {
   document.documentElement.dataset.elemental = "ready";
 }
 
-async function loadManifest(): Promise<BuildManifest> {
+async function loadManifest(): Promise<PublicBuildManifest> {
   const response = await fetch(ELEMENTAL_MANIFEST_PATH, {
     headers: {
       accept: "application/json",
@@ -45,7 +45,7 @@ async function loadManifest(): Promise<BuildManifest> {
     throw new Error(`Failed to load Elemental manifest: ${response.status} ${response.statusText}`);
   }
 
-  return (await response.json()) as BuildManifest;
+  return (await response.json()) as PublicBuildManifest;
 }
 
 async function primeCurrentRoute(state: BootstrapState): Promise<void> {

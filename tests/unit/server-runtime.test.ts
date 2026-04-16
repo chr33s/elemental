@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildProject } from "../../src/build/index.ts";
-import type { BuildManifest } from "../../src/build/manifest.ts";
+import type { BuildManifest, PublicBuildManifest } from "../../src/build/manifest.ts";
 import { handleElementalRequest, type RouterPayload } from "../../src/runtime/server/app.ts";
 import { writeRouteModule } from "./test-helpers/app-fixture.ts";
 
@@ -263,6 +263,29 @@ export default function docsRoute(props: RouteProps) {
         }),
       ),
     );
+  });
+
+  it("serves a client-safe runtime manifest without server module paths", async () => {
+    const response = await handleElementalRequest(new Request("http://example.com/manifest.json"), {
+      distDir: outDir,
+      manifest,
+    });
+    const publicManifest = (await response.json()) as PublicBuildManifest;
+    const route = publicManifest.routes[0]!;
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(publicManifest.appDir).toBe(manifest.appDir);
+    expect(route.pattern).toBe(manifest.routes[0]?.pattern);
+    expect(Object.keys(route.browser)).toEqual(["errorBoundaries"]);
+    expect(Object.hasOwn(route, "server")).toBe(false);
+    expect(Object.hasOwn(route, "source")).toBe(false);
+    expect(Object.hasOwn(route, "serverSource")).toBe(false);
+    expect(Object.hasOwn(route, "layouts")).toBe(false);
+    expect(Object.hasOwn(route, "layoutStylesheets")).toBe(false);
+    expect(Object.hasOwn(route, "serverErrorBoundaries")).toBe(false);
   });
 
   it("renders matched routes with nested layouts, head, and assets", async () => {

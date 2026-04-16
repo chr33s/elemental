@@ -391,7 +391,6 @@ function getIdentifierName(value: unknown): string | undefined {
 
   return node.name;
 }
-
 function getNodeRange(node: LooseNode | null): [number, number] | undefined {
   if (node === null || !Array.isArray(node.range) || node.range.length !== 2) {
     return undefined;

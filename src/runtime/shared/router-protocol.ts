@@ -3,7 +3,11 @@ import type { RouterPayload } from "./types.ts";
 export const ROUTER_HEADER_NAME = "x-elemental-router";
 
 export function createRouterPayloadResponse(payload: RouterPayload, init?: ResponseInit): Response {
-  return Response.json(payload, init);
+  const response = Response.json(payload, init);
+
+  response.headers.set("x-content-type-options", "nosniff");
+
+  return response;
 }
 
 export function createRouterRequestHeaders(headers?: HeadersInit): Headers {

@@ -66,12 +66,23 @@ export function broadcastDevMessage(clients: Set<ServerResponse>, message: DevSs
   }
 }
 
+const HOP_BY_HOP_HEADERS = new Set([
+  "connection",
+  "keep-alive",
+  "proxy-authenticate",
+  "proxy-authorization",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]);
+
 async function proxyToChild(request: IncomingMessage, childPort: number): Promise<Response> {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${childPort}`);
   const headers = new Headers();
 
   for (const [headerName, headerValue] of Object.entries(request.headers)) {
-    if (headerValue === undefined) {
+    if (headerValue === undefined || HOP_BY_HOP_HEADERS.has(headerName.toLowerCase())) {
       continue;
     }
 

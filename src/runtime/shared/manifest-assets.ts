@@ -1,4 +1,8 @@
-import type { BuildManifestRoute } from "../../build/manifest.ts";
+import type { BuildManifestRoute, PublicBuildManifestRoute } from "../../build/manifest.ts";
+
+type ManifestRouteAssetsLike =
+  | Pick<BuildManifestRoute, "assets">
+  | Pick<PublicBuildManifestRoute, "assets">;
 
 export interface NormalizedManifestRouteAssets {
   css: string[];
@@ -6,7 +10,7 @@ export interface NormalizedManifestRouteAssets {
 }
 
 export function normalizeManifestRouteAssets(
-  route: Pick<BuildManifestRoute, "assets">,
+  route: ManifestRouteAssetsLike,
 ): NormalizedManifestRouteAssets {
   return {
     css: route.assets.css ?? route.assets.layoutCss ?? [],

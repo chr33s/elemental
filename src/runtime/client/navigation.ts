@@ -1,4 +1,4 @@
-import type { BuildManifest } from "../../build/manifest.ts";
+import type { PublicBuildManifest } from "../../build/manifest.ts";
 import { normalizeManifestRouteAssets } from "../shared/manifest-assets.ts";
 import { createRouterRequestHeaders, isRouterPayloadResponse } from "../shared/router-protocol.ts";
 import { matchManifestRoute, type MatchedManifestRoute } from "../shared/routes.ts";
@@ -13,10 +13,12 @@ import {
 
 export type NavigationHistoryMode = "auto" | "none" | "push" | "replace";
 
+type PublicManifestRoute = PublicBuildManifest["routes"][number];
+
 export interface BootstrapState {
-  currentRoute?: MatchedManifestRoute;
+  currentRoute?: MatchedManifestRoute<PublicManifestRoute>;
   loadedScriptModules: Set<string>;
-  manifest: BuildManifest;
+  manifest: PublicBuildManifest;
 }
 
 interface ElementalNavigationApi extends EventTarget {
@@ -173,11 +175,11 @@ export async function loadScriptModules(
   }
 }
 
-export function getRouteScriptAssets(route: MatchedManifestRoute["route"]): string[] {
+export function getRouteScriptAssets(route: PublicManifestRoute): string[] {
   return normalizeManifestRouteAssets(route).js;
 }
 
-export function getRouteStylesheetAssets(route: MatchedManifestRoute["route"]): string[] {
+export function getRouteStylesheetAssets(route: PublicManifestRoute): string[] {
   return normalizeManifestRouteAssets(route).css.map((assetPath) => normalizeAssetHref(assetPath));
 }
 
@@ -310,6 +312,8 @@ function renderRouteOutlet(outlet: string): void {
     throw new Error("Missing [data-route-outlet] container in the current document.");
   }
 
+  // Security-sensitive sink: router payload outlet HTML must be framework-generated
+  // or sanitized before it reaches this point.
   routeOutlet.innerHTML = outlet;
 }
 

@@ -1,4 +1,9 @@
-import type { BuildManifest, BuildManifestRoute } from "../../build/manifest.ts";
+import type {
+  BuildManifest,
+  BuildManifestRoute,
+  PublicBuildManifest,
+  PublicBuildManifestRoute,
+} from "../../build/manifest.ts";
 import {
   dirnamePosix,
   normalizePosixPath,
@@ -8,6 +13,13 @@ import {
 import type { RouteParams } from "./types.ts";
 
 export type ErrorBoundaryKind = "browser" | "server";
+
+type RouteWithServerErrorBoundaries = Pick<BuildManifestRoute, "server" | "serverErrorBoundaries">;
+
+type RouteWithBrowserErrorBoundaries = Pick<
+  PublicBuildManifestRoute,
+  "browser" | "errorBoundaries"
+>;
 
 interface BoundaryEntry {
   modulePath: string;
@@ -34,15 +46,42 @@ export interface ResolvedErrorBoundary {
   sourcePath: string;
 }
 
-export function resolveNearestErrorBoundaryForPathname(
+export function resolveNearestBrowserErrorBoundaryForPathname(
+  manifest: PublicBuildManifest,
+  pathname: string,
+): ResolvedErrorBoundary | undefined {
+  return resolveNearestBoundaryForPathname({
+    appDir: normalizePosixPath(manifest.appDir),
+    directories: createBrowserManifestDirectoryMap(manifest),
+    kind: "browser",
+    pathname,
+  });
+}
+
+export function resolveNearestServerErrorBoundaryForPathname(
   manifest: BuildManifest,
   pathname: string,
-  kind: ErrorBoundaryKind,
 ): ResolvedErrorBoundary | undefined {
-  const appDir = normalizePosixPath(manifest.appDir);
-  const directories = createManifestDirectoryMap(manifest, appDir);
-  const pathnameSegments = splitPathSegments(pathname);
-  const matchedDirectory = findDeepestMatchingDirectory(directories, pathnameSegments, appDir);
+  return resolveNearestBoundaryForPathname({
+    appDir: normalizePosixPath(manifest.appDir),
+    directories: createServerManifestDirectoryMap(manifest),
+    kind: "server",
+    pathname,
+  });
+}
+
+function resolveNearestBoundaryForPathname(options: {
+  appDir: string;
+  directories: Map<string, ManifestDirectory>;
+  kind: ErrorBoundaryKind;
+  pathname: string;
+}): ResolvedErrorBoundary | undefined {
+  const pathnameSegments = splitPathSegments(options.pathname);
+  const matchedDirectory = findDeepestMatchingDirectory(
+    options.directories,
+    pathnameSegments,
+    options.appDir,
+  );
 
   if (matchedDirectory === undefined) {
     return undefined;
@@ -51,9 +90,11 @@ export function resolveNearestErrorBoundaryForPathname(
   let currentDirectoryPath = matchedDirectory.directory.path;
 
   while (true) {
-    const currentDirectory = directories.get(currentDirectoryPath);
+    const currentDirectory = options.directories.get(currentDirectoryPath);
     const boundary =
-      kind === "browser" ? currentDirectory?.browserBoundary : currentDirectory?.serverBoundary;
+      options.kind === "browser"
+        ? currentDirectory?.browserBoundary
+        : currentDirectory?.serverBoundary;
 
     if (boundary !== undefined) {
       return {
@@ -64,7 +105,7 @@ export function resolveNearestErrorBoundaryForPathname(
       };
     }
 
-    if (currentDirectoryPath === appDir) {
+    if (currentDirectoryPath === options.appDir) {
       return undefined;
     }
 
@@ -72,14 +113,29 @@ export function resolveNearestErrorBoundaryForPathname(
   }
 }
 
-export function resolveNearestErrorBoundaryForRoute(
-  route: BuildManifestRoute,
+export function resolveNearestBrowserErrorBoundaryForRoute(
+  route: RouteWithBrowserErrorBoundaries,
   params: RouteParams,
-  kind: ErrorBoundaryKind,
 ): ResolvedErrorBoundary | undefined {
-  const sourcePaths = kind === "browser" ? route.errorBoundaries : route.serverErrorBoundaries;
-  const modulePaths =
-    kind === "browser" ? route.browser.errorBoundaries : route.server.serverErrorBoundaries;
+  return resolveBoundaryForRoute(route.errorBoundaries, route.browser.errorBoundaries, params);
+}
+
+export function resolveNearestServerErrorBoundaryForRoute(
+  route: RouteWithServerErrorBoundaries,
+  params: RouteParams,
+): ResolvedErrorBoundary | undefined {
+  return resolveBoundaryForRoute(
+    route.serverErrorBoundaries,
+    route.server.serverErrorBoundaries,
+    params,
+  );
+}
+
+function resolveBoundaryForRoute(
+  sourcePaths: string[],
+  modulePaths: string[],
+  params: RouteParams,
+): ResolvedErrorBoundary | undefined {
   const boundaryIndex = Math.min(sourcePaths.length, modulePaths.length) - 1;
 
   if (boundaryIndex < 0) {
@@ -94,38 +150,39 @@ export function resolveNearestErrorBoundaryForRoute(
   };
 }
 
-export function resolveNearestBrowserErrorBoundaryForPathname(
-  manifest: BuildManifest,
-  pathname: string,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestErrorBoundaryForPathname(manifest, pathname, "browser");
-}
-
-export function resolveNearestBrowserErrorBoundaryForRoute(
-  route: BuildManifestRoute,
-  params: RouteParams,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestErrorBoundaryForRoute(route, params, "browser");
-}
-
-export function resolveNearestServerErrorBoundaryForPathname(
-  manifest: BuildManifest,
-  pathname: string,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestErrorBoundaryForPathname(manifest, pathname, "server");
-}
-
-export function resolveNearestServerErrorBoundaryForRoute(
-  route: BuildManifestRoute,
-  params: RouteParams,
-): ResolvedErrorBoundary | undefined {
-  return resolveNearestErrorBoundaryForRoute(route, params, "server");
-}
-
-function createManifestDirectoryMap(
-  manifest: BuildManifest,
-  appDir: string,
+function createBrowserManifestDirectoryMap(
+  manifest: PublicBuildManifest,
 ): Map<string, ManifestDirectory> {
+  const appDir = normalizePosixPath(manifest.appDir);
+  const directories = new Map<string, ManifestDirectory>();
+
+  ensureDirectory(directories, appDir, appDir);
+
+  for (const route of manifest.routes) {
+    for (const sourcePath of route.errorBoundaries) {
+      ensureDirectory(directories, appDir, dirnamePosix(sourcePath));
+    }
+
+    for (let index = 0; index < route.errorBoundaries.length; index += 1) {
+      const sourcePath = route.errorBoundaries[index];
+      const modulePath = route.browser.errorBoundaries[index];
+
+      if (modulePath === undefined) {
+        continue;
+      }
+
+      ensureDirectory(directories, appDir, dirnamePosix(sourcePath)).browserBoundary = {
+        modulePath,
+        sourcePath,
+      };
+    }
+  }
+
+  return directories;
+}
+
+function createServerManifestDirectoryMap(manifest: BuildManifest): Map<string, ManifestDirectory> {
+  const appDir = normalizePosixPath(manifest.appDir);
   const directories = new Map<string, ManifestDirectory>();
 
   ensureDirectory(directories, appDir, appDir);

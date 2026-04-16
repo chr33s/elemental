@@ -1,5 +1,6 @@
 import { once } from "node:events";
 import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { request as sendHttpRequest } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,13 +64,50 @@ describe("server adapters", () => {
     );
 
     expect(jsResponse.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+    expect(jsResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(await jsResponse.text()).toContain('console.log("app")');
     expect(cssResponse.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(cssResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(jsonResponse.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(jsonResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(forbiddenResponse.status).toBe(403);
+    expect(forbiddenResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(await forbiddenResponse.text()).toBe("Forbidden");
     expect(missingResponse.status).toBe(404);
+    expect(missingResponse.headers.get("x-content-type-options")).toBe("nosniff");
     expect(await missingResponse.text()).toBe("Asset not found");
+  });
+
+  it("only resolves manifest-driven modules from the built server tree", async () => {
+    const distDir = await mkdtemp(path.join(rootDir, ".tmp-node-module-runtime-"));
+
+    temporaryPaths.add(distDir);
+    await mkdir(path.join(distDir, "server"), { recursive: true });
+    await mkdir(path.join(distDir, "assets"), { recursive: true });
+    await writeFile(
+      path.join(distDir, "server", "entry.mjs"),
+      "export const marker = 'server-only';\n",
+      "utf8",
+    );
+    await writeFile(
+      path.join(distDir, "assets", "client.mjs"),
+      "export const marker = 'client-asset';\n",
+      "utf8",
+    );
+
+    const runtime = createNodeRuntime(distDir);
+    const serverModule = await runtime.resolveServerModule<{ marker: string }>("server/entry.mjs");
+
+    expect(serverModule.marker).toBe("server-only");
+    await expect(runtime.resolveServerModule("assets/client.mjs")).rejects.toThrow(
+      /Invalid server module path/u,
+    );
+    await expect(runtime.resolveServerModule("../escape.mjs")).rejects.toThrow(
+      /Invalid server module path/u,
+    );
+    await expect(runtime.resolveServerModule("file:///tmp/escape.mjs")).rejects.toThrow(
+      /Invalid server module path/u,
+    );
   });
 
   it("translates Node HTTP requests for HEAD and POST handling", async () => {
@@ -145,6 +183,76 @@ export default function home() {
 
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("<main>Home</main>");
+  });
+
+  it("can build request URLs from a configured canonical origin", async () => {
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { manifest, outDir } = await buildTempApp({
+      "index.ts": `import { html, type RouteProps } from "elemental";
+
+export default function home(props: RouteProps) {
+  return html\`<main>${"${props.url.origin}"}</main>\`;
+}
+`,
+    });
+    const server = startServer({
+      canonicalOrigin: "https://app.example.com/base?ignored=1",
+      distDir: outDir,
+      manifest,
+      port: 0,
+    });
+
+    await once(server, "listening");
+
+    const port = (server.address() as AddressInfo).port;
+    const response = await sendNodeRequest({
+      headers: {
+        host: "evil.example",
+      },
+      path: "/",
+      port,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toContain("<main>https://app.example.com</main>");
+
+    await closeServer(server);
+    expect(consoleLog).toHaveBeenCalledOnce();
+  });
+
+  it("rejects requests whose host header is not allowlisted", async () => {
+    const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { manifest, outDir } = await buildTempApp({
+      "index.ts": `import { html } from "elemental";
+
+export default function home() {
+  return html\`<main>Home</main>\`;
+}
+`,
+    });
+    const server = startServer({
+      allowedHosts: ["app.example.com"],
+      distDir: outDir,
+      manifest,
+      port: 0,
+    });
+
+    await once(server, "listening");
+
+    const port = (server.address() as AddressInfo).port;
+    const response = await sendNodeRequest({
+      headers: {
+        host: "evil.example",
+      },
+      path: "/",
+      port,
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body).toBe("Invalid Host header");
+
+    await closeServer(server);
+    expect(consoleLog).toHaveBeenCalledOnce();
   });
 
   it("serves worker assets through ASSETS and falls back cleanly when missing", async () => {
@@ -240,5 +348,45 @@ async function closeNodeServer(server: {
 
       resolve();
     });
+  });
+}
+
+async function sendNodeRequest(options: {
+  headers?: Record<string, string>;
+  path: string;
+  port: number;
+}): Promise<{
+  body: string;
+  headers: Record<string, string | string[] | undefined>;
+  status: number;
+}> {
+  return new Promise((resolve, reject) => {
+    const request = sendHttpRequest(
+      {
+        headers: options.headers,
+        host: "127.0.0.1",
+        method: "GET",
+        path: options.path,
+        port: options.port,
+      },
+      (response) => {
+        let body = "";
+
+        response.setEncoding("utf8");
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          resolve({
+            body,
+            headers: response.headers,
+            status: response.statusCode ?? 0,
+          });
+        });
+      },
+    );
+
+    request.on("error", reject);
+    request.end();
   });
 }

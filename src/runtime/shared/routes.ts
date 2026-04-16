@@ -1,16 +1,20 @@
-import type { BuildManifestRoute } from "../../build/manifest.ts";
+import type { BuildManifestRoute, PublicBuildManifestRoute } from "../../build/manifest.ts";
 import { splitPathSegments } from "../../shared/path-utils.ts";
 import type { RouteParams } from "./types.ts";
 
-export interface MatchedManifestRoute {
+type ManifestRouteLike =
+  | Pick<BuildManifestRoute, "pattern">
+  | Pick<PublicBuildManifestRoute, "pattern">;
+
+export interface MatchedManifestRoute<TRoute extends ManifestRouteLike = BuildManifestRoute> {
   params: RouteParams;
-  route: BuildManifestRoute;
+  route: TRoute;
 }
 
-export function matchManifestRoute(
+export function matchManifestRoute<TRoute extends ManifestRouteLike>(
   pathname: string,
-  routes: BuildManifestRoute[],
-): MatchedManifestRoute | undefined {
+  routes: TRoute[],
+): MatchedManifestRoute<TRoute> | undefined {
   const pathnameSegments = splitPathSegments(pathname);
 
   for (const route of routes) {

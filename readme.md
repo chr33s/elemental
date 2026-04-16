@@ -107,6 +107,34 @@ const name = "<Chris>";
 html`<p data-name=${name}>Hello ${name}</p>`;
 ```
 
+### Security Note
+
+`safeHtml()` is a raw trust escape hatch, not a sanitizer. Values passed to it can later reach client-side DOM insertion paths used for route outlet replacement and managed `<head>` updates.
+
+Unsafe:
+
+```ts
+import { html, safeHtml } from "elemental";
+
+export default function route({ data }: { data: { bioHtml: string } }) {
+  return html`<section>${safeHtml(data.bioHtml)}</section>`;
+}
+```
+
+Safer:
+
+```ts
+import { html } from "elemental";
+
+export default function route({ data }: { data: { bio: string } }) {
+  return html`<section>${data.bio}</section>`;
+}
+```
+
+Only pass values to `safeHtml()` after they were produced by framework-controlled markup generation or sanitized by a library you trust for the exact HTML policy you need.
+
+`oxlint` reports direct `safeHtml()` calls in app route, layout, and browser error-boundary modules. For intentionally reviewed exceptions, use a local `oxlint-disable-next-line elemental/no-unsafe-safe-html` comment and explain the trust boundary inline.
+
 ## CSS Behavior
 
 - `layout.css` — emitted as a document stylesheet asset, injected in root-to-leaf layout order.
@@ -212,7 +240,11 @@ node dist/srvx.js
 
 Outputs `dist/server.js`, `dist/srvx.js`, `dist/assets/*`, `dist/manifest.json`.
 
-Environment: `PORT` (default 3000), `HOST` (default 0.0.0.0). Runs on any Node.js 24+ platform.
+Environment: `PORT` (default 3000), `HOST` (default 0.0.0.0), `ELEMENTAL_CANONICAL_ORIGIN` to decouple request URL construction from inbound `Host`, and `ELEMENTAL_ALLOWED_HOSTS` as a comma-separated allowlist for accepted hostnames or host:port values. Runs on any Node.js 24+ platform.
+
+For production deployments behind a proxy or load balancer, prefer setting `ELEMENTAL_CANONICAL_ORIGIN` and optionally `ELEMENTAL_ALLOWED_HOSTS` instead of relying on raw inbound `Host` headers.
+
+At runtime, `/manifest.json` serves a client-safe subset for the browser runtime with `cache-control: no-store`. Production deployments that serve this endpoint through a CDN may override this with a short `max-age` or `stale-while-revalidate` to reduce origin load between builds. The full `dist/manifest.json` remains a trusted build artifact for deployment and server-side tooling.
 
 ### Cloudflare Workers
 

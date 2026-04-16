@@ -4,26 +4,33 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import type { BuildManifest } from "../../build/manifest.ts";
-import { textResponse } from "../shared/responses.ts";
-import {
-  handleElementalRequestWithRuntime,
-  type RouterPayload,
-  type ServerRuntimeAdapter,
-} from "./core.ts";
+import { createRequestHandler, type RouterPayload, type ServerRuntimeAdapter } from "./core.ts";
 
 export interface StartServerOptions {
+  allowedHosts?: string[];
+  canonicalOrigin?: string;
   distDir: string;
   manifest: BuildManifest;
   port?: number;
 }
 
+interface NodeRequestSecurityOptions {
+  allowedHosts?: string[];
+  canonicalOrigin?: string;
+}
+
 export type { RouterPayload };
 
 export function startServer(options: StartServerOptions): Server {
+  const allowedHosts = options.allowedHosts ?? readAllowedHostsFromEnvironment();
+  const canonicalOrigin = options.canonicalOrigin ?? process.env.ELEMENTAL_CANONICAL_ORIGIN;
   const port = options.port ?? Number(process.env.PORT ?? 3000);
   const handleRequest = createNodeRequestHandler(options);
   const server = createServer((request, response) => {
-    void handleNodeRequest(request, response, handleRequest);
+    void handleNodeRequest(request, response, handleRequest, {
+      allowedHosts,
+      canonicalOrigin,
+    });
   });
 
   server.listen(port, () => {
@@ -38,12 +45,10 @@ export function createNodeRequestHandler(
 ): (request: Request) => Promise<Response> {
   const runtime = createNodeRuntime(options.distDir);
 
-  return async function handleRequest(request: Request): Promise<Response> {
-    return handleElementalRequestWithRuntime(request, {
-      manifest: options.manifest,
-      runtime,
-    });
-  };
+  return createRequestHandler({
+    manifest: options.manifest,
+    runtime,
+  });
 }
 
 export async function handleElementalRequest(
@@ -79,14 +84,22 @@ async function handleNodeRequest(
   request: IncomingMessage,
   response: ServerResponse,
   handleRequest: (request: Request) => Promise<Response>,
+  options: NodeRequestSecurityOptions,
 ): Promise<void> {
   try {
-    const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "127.0.0.1:3000"}`);
+    const url = createNodeRequestUrl(request, options);
     const requestObject = createWebRequest(request, url);
     const renderedResponse = await handleRequest(requestObject);
 
     await sendNodeResponse(response, renderedResponse, request.method ?? "GET");
   } catch (error) {
+    if (error instanceof InvalidHostHeaderError) {
+      response.statusCode = 400;
+      response.setHeader("content-type", "text/plain; charset=utf-8");
+      response.end("Invalid Host header");
+      return;
+    }
+
     console.error(error);
     response.statusCode = 500;
     response.setHeader("content-type", "text/plain; charset=utf-8");
@@ -104,7 +117,7 @@ async function serveAssetFromFileSystem(
   const normalizedRelativePath = path.relative(distDir, filePath);
 
   if (normalizedRelativePath.startsWith("..") || path.isAbsolute(normalizedRelativePath)) {
-    return textResponse("Forbidden", 403);
+    return createAssetTextResponse("Forbidden", 403);
   }
 
   try {
@@ -112,22 +125,156 @@ async function serveAssetFromFileSystem(
     return new Response(fileContents, {
       headers: {
         "content-type": contentTypeForPath(filePath),
+        "x-content-type-options": "nosniff",
       },
       status: 200,
     });
   } catch {
-    return textResponse("Asset not found", 404);
+    return createAssetTextResponse("Asset not found", 404);
   }
 }
 
+class InvalidHostHeaderError extends Error {
+  constructor() {
+    super("Invalid Host header");
+  }
+}
+
+class InvalidServerModulePathError extends Error {
+  constructor(modulePath: string) {
+    super(`Invalid server module path ${JSON.stringify(modulePath)}`);
+  }
+}
+
+function createNodeRequestUrl(request: IncomingMessage, options: NodeRequestSecurityOptions): URL {
+  const host = normalizeHostHeaderValue(request.headers.host);
+
+  if (options.allowedHosts !== undefined && !isAllowedHost(host, options.allowedHosts)) {
+    throw new InvalidHostHeaderError();
+  }
+
+  const baseOrigin = options.canonicalOrigin ?? `http://${host ?? "127.0.0.1:3000"}`;
+
+  return new URL(request.url ?? "/", normalizeOrigin(baseOrigin));
+}
+
+function createAssetTextResponse(body: string, status: number): Response {
+  return new Response(body, {
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "x-content-type-options": "nosniff",
+    },
+    status,
+  });
+}
+
+function isAllowedHost(host: string | undefined, allowedHosts: string[]): boolean {
+  if (host === undefined) {
+    return false;
+  }
+
+  const parsedHost = new URL(`http://${host}`);
+
+  return allowedHosts.some((allowedHost) => {
+    const normalizedAllowedHost = normalizeAllowedHost(allowedHost);
+
+    return (
+      normalizedAllowedHost === parsedHost.host.toLowerCase() ||
+      normalizedAllowedHost === parsedHost.hostname.toLowerCase()
+    );
+  });
+}
+
+function normalizeAllowedHost(host: string): string {
+  const normalized = normalizeHostHeaderValue(host);
+
+  if (normalized === undefined) {
+    throw new Error(`Invalid allowed host ${JSON.stringify(host)}`);
+  }
+
+  return normalized;
+}
+
+function normalizeHostHeaderValue(hostHeader: string | string[] | undefined): string | undefined {
+  const rawHost = Array.isArray(hostHeader) ? hostHeader[0] : hostHeader;
+
+  if (rawHost === undefined) {
+    return undefined;
+  }
+
+  const trimmedHost = rawHost.trim();
+
+  if (trimmedHost.length === 0 || /[/?#@]/u.test(trimmedHost)) {
+    throw new InvalidHostHeaderError();
+  }
+
+  try {
+    return new URL(`http://${trimmedHost}`).host.toLowerCase();
+  } catch {
+    throw new InvalidHostHeaderError();
+  }
+}
+
+function normalizeOrigin(origin: string): string {
+  const parsedOrigin = new URL(origin);
+
+  if (parsedOrigin.protocol !== "http:" && parsedOrigin.protocol !== "https:") {
+    throw new Error(`Canonical origin must use http or https: ${origin}`);
+  }
+
+  return parsedOrigin.origin;
+}
+
+function readAllowedHostsFromEnvironment(): string[] | undefined {
+  const value = process.env.ELEMENTAL_ALLOWED_HOSTS?.trim();
+
+  if (value === undefined || value.length === 0) {
+    return undefined;
+  }
+
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
 function createServerModuleResolver(distDir: string) {
-  const baseUrl = toDirectoryUrl(distDir);
+  const normalizedDistDir = path.resolve(distDir);
+  const serverRootDir = path.resolve(normalizedDistDir, "server");
 
   return async function resolveServerModule<TModule>(modulePath: string): Promise<TModule> {
-    const resolvedUrl = new URL(modulePath, baseUrl);
+    const resolvedPath = resolveServerModulePath(normalizedDistDir, serverRootDir, modulePath);
 
-    return (await import(resolvedUrl.href)) as TModule;
+    return (await import(pathToFileURL(resolvedPath).href)) as TModule;
   };
+}
+
+function resolveServerModulePath(
+  distDir: string,
+  serverRootDir: string,
+  modulePath: string,
+): string {
+  if (
+    modulePath.length === 0 ||
+    path.isAbsolute(modulePath) ||
+    /^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(modulePath)
+  ) {
+    throw new InvalidServerModulePathError(modulePath);
+  }
+
+  const resolvedPath = path.resolve(distDir, modulePath);
+
+  if (!isPathInsideDirectory(resolvedPath, serverRootDir)) {
+    throw new InvalidServerModulePathError(modulePath);
+  }
+
+  return resolvedPath;
+}
+
+function isPathInsideDirectory(candidatePath: string, directoryPath: string): boolean {
+  const relativePath = path.relative(directoryPath, candidatePath);
+
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
 function createWebRequest(request: IncomingMessage, url: URL): Request {
@@ -177,12 +324,6 @@ async function sendNodeResponse(
   }
 
   nodeResponse.end(Buffer.from(await response.arrayBuffer()));
-}
-
-function toDirectoryUrl(filePath: string): string {
-  const href = pathToFileURL(filePath).href;
-
-  return href.endsWith("/") ? href : `${href}/`;
 }
 
 function contentTypeForPath(filePath: string): string {
