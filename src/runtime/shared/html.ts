@@ -20,6 +20,17 @@ export type CssTextValue = {
   valueOf(): string;
 };
 
+export type DeclarativeShadowDomStyle = CSSStyleSheet | HtmlRenderable;
+
+export interface DeclarativeShadowDomOptions {
+  content: HtmlRenderable;
+  styles?: DeclarativeShadowDomStyle | DeclarativeShadowDomStyle[];
+  mode?: "closed" | "open";
+  delegatesFocus?: boolean;
+  clonable?: boolean;
+  serializable?: boolean;
+}
+
 export type HtmlRenderable =
   | CssTextValue
   | HtmlResult
@@ -121,6 +132,35 @@ export function cssText(value: string): CssTextValue {
 }
 
 /**
+ * Renders a Declarative Shadow DOM template.
+ *
+ * `content` is rendered with the same escaped-by-default semantics as `html`.
+ * `styles` entries are wrapped in `<style>` tags, so server CSS imports branded
+ * with `cssText()` are emitted as raw CSS while plain strings remain escaped.
+ */
+export function declarativeShadowDom(options: DeclarativeShadowDomOptions): HtmlResult {
+  const mode = options.mode ?? "open";
+  const attributes = [
+    `shadowrootmode="${mode}"`,
+    options.delegatesFocus ? "shadowrootdelegatesfocus" : undefined,
+    options.clonable ? "shadowrootclonable" : undefined,
+    options.serializable ? "shadowrootserializable" : undefined,
+  ].filter((attribute): attribute is string => attribute !== undefined);
+  const styles = normalizeDeclarativeShadowDomStyles(options.styles)
+    .filter((style): style is HtmlRenderable => !isCssStyleSheetValue(style))
+    .map(
+      (style) =>
+        html`<style>
+          ${style}
+        </style>`,
+    );
+
+  return createHtmlResult(
+    `<template ${attributes.join(" ")}>${renderToString(styles)}${renderToString(options.content)}</template>`,
+  );
+}
+
+/**
  * Marks a string as trusted HTML that should bypass escaping.
  *
  * **Warning**: Only use with content you trust. No sanitization is performed.
@@ -190,6 +230,20 @@ export function escapeHtml(value: string): string {
 
 function createHtmlResult(value: string): HtmlResult {
   return new HtmlResult(value, HTML_RESULT_TOKEN);
+}
+
+function normalizeDeclarativeShadowDomStyles(
+  styles: DeclarativeShadowDomOptions["styles"],
+): DeclarativeShadowDomStyle[] {
+  if (styles === undefined) {
+    return [];
+  }
+
+  return Array.isArray(styles) ? styles : [styles];
+}
+
+function isCssStyleSheetValue(value: DeclarativeShadowDomStyle): value is CSSStyleSheet {
+  return typeof CSSStyleSheet === "function" && value instanceof CSSStyleSheet;
 }
 
 function isHtmlResult(value: HtmlRenderable): value is HtmlResult {

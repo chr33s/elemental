@@ -31,7 +31,7 @@ v0 intentionally focuses on a single rendering model: runtime SSR. There is no m
 - Support route-level data loading and mutations.
 - Use `index.ts` as the default route render module.
 - Use `layout.ts` as the default layout render module.
-- Support `import { html, safeHtml } from 'elemental';` for route and layout rendering.
+- Support `import { declarativeShadowDom, html, safeHtml } from 'elemental';` for route and layout rendering.
 - Escape interpolated values by default unless explicitly marked safe.
 - Support client-side navigation and route transitions.
 - Support native custom element upgrade in the browser.
@@ -429,6 +429,29 @@ export default function route(props: RouteProps) {
 ```
 
 `safeHtml(...)` must only be used with trusted content.
+
+### Declarative Shadow DOM helper
+
+Elemental exposes `declarativeShadowDom(...)` for rendering server-first shadow roots from route and layout output. The helper returns an `HtmlResult`, uses the same escaped-by-default content model as `html`, and wraps optional scoped styles in generated `<style>` tags.
+
+```ts
+import { declarativeShadowDom, html } from "elemental";
+import sheet from "./card.css";
+
+export default function route() {
+  return html`
+    <user-card>
+      ${declarativeShadowDom({
+        content: html`<article><slot name="title"></slot></article>`,
+        styles: [sheet],
+      })}
+      <span slot="title">Hello</span>
+    </user-card>
+  `;
+}
+```
+
+Browser route transitions must use native DSD-aware fragment parsing for router payloads that contain `<template shadowrootmode="...">`. If a browser cannot parse DSD during fragment insertion, Elemental must fall back to full document navigation rather than inserting inert shadow templates.
 
 ### Named exports for client components
 

@@ -1,12 +1,19 @@
 export {
   HtmlResult,
   cssText,
+  declarativeShadowDom,
   escapeHtml,
   html,
   renderToString,
   safeHtml,
 } from "./runtime/shared/html.ts";
-export type { HtmlRenderable } from "./runtime/shared/html.ts";
+export type {
+  CssTextValue,
+  DeclarativeShadowDomOptions,
+  DeclarativeShadowDomStyle,
+  HtmlRenderable,
+  SafeHtmlValue,
+} from "./runtime/shared/html.ts";
 export type {
   ClientErrorProps,
   ErrorProps,

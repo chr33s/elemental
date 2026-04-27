@@ -127,6 +127,109 @@ describe("client navigation helpers", () => {
     );
   });
 
+  it("uses native unsafe fragment parsing for declarative shadow DOM payloads", async () => {
+    const browser = createFakeBrowser("http://example.com/guides");
+    const outlet =
+      '<el-card><template shadowrootmode="open"><p>Rendered shadow content</p></template></el-card>';
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      createRouterPayloadResponse({
+        assets: {
+          scripts: [],
+          stylesheets: [],
+        },
+        head: "",
+        outlet,
+        status: 200,
+      }),
+    );
+    const routeOutlet = browser.document.createElement("main") as typeof browser.document.body & {
+      setHTMLUnsafe(markup: string): void;
+    };
+    const setHTMLUnsafe = vi.fn<(markup: string) => void>((markup) => {
+      routeOutlet.innerHTML = markup;
+    });
+
+    routeOutlet.setAttribute("data-route-outlet", "");
+    routeOutlet.setHTMLUnsafe = setHTMLUnsafe;
+    browser.document.body.appendChild(routeOutlet);
+    stubFakeBrowserGlobals(browser);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await refreshCurrentRoute(createBootstrapState(createManifest([createRoute("/guides")])));
+
+    expect(setHTMLUnsafe).toHaveBeenCalledWith(outlet);
+    expect(routeOutlet.innerHTML).toBe(outlet);
+  });
+
+  it("falls back to full document navigation for DSD payloads without fragment parsing", async () => {
+    const browser = createFakeBrowser("http://example.com/guides");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      createRouterPayloadResponse({
+        assets: {
+          scripts: [],
+          stylesheets: [],
+        },
+        head: "",
+        outlet:
+          '<el-card><template shadowrootmode="open"><p>Rendered shadow content</p></template></el-card>',
+        status: 200,
+      }),
+    );
+    const routeOutlet = browser.document.createElement("main");
+
+    routeOutlet.setAttribute("data-route-outlet", "");
+    browser.document.body.appendChild(routeOutlet);
+    stubFakeBrowserGlobals(browser);
+    vi.stubGlobal("fetch", fetchMock);
+
+    await refreshCurrentRoute(createBootstrapState(createManifest([createRoute("/guides")])));
+
+    expect(browser.window.location.reloadCalls).toBe(1);
+    expect(routeOutlet.innerHTML).toBe("");
+  });
+
+  it("bypasses browser error recovery for unsupported DSD fragment parsing", async () => {
+    const browser = createFakeBrowser("http://example.com/guides");
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
+      createRouterPayloadResponse({
+        assets: {
+          scripts: [],
+          stylesheets: [],
+        },
+        head: "",
+        outlet:
+          '<el-card><template shadowrootmode="open"><p>Rendered shadow content</p></template></el-card>',
+        status: 200,
+      }),
+    );
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const routeOutlet = browser.document.createElement("main");
+
+    routeOutlet.setAttribute("data-route-outlet", "");
+    browser.document.body.appendChild(routeOutlet);
+    stubFakeBrowserGlobals(browser);
+    vi.stubGlobal("fetch", fetchMock);
+
+    try {
+      await refreshCurrentRoute(
+        createBootstrapState(
+          createManifest([
+            createRoute({
+              browserBoundaryModules: ["assets/error.js"],
+              browserBoundarySources: ["app/src/error.ts"],
+              pattern: "/guides",
+            }),
+          ]),
+        ),
+      );
+
+      expect(browser.window.location.reloadCalls).toBe(1);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
+
   it("listens for popstate when the Navigation API is unavailable", async () => {
     const browser = createFakeBrowser("http://example.com/about");
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(

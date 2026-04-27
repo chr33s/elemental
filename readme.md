@@ -97,7 +97,7 @@ export async function action(context: RouteServerContext) {
 ## HTML Helper
 
 ```ts
-import { html, safeHtml } from "elemental";
+import { declarativeShadowDom, html, safeHtml } from "elemental";
 ```
 
 `html` escapes interpolated values by default, flattens arrays, preserves nested `html` results, and auto-quotes attribute interpolations. Use `safeHtml()` only for trusted input.
@@ -135,6 +135,41 @@ Only pass values to `safeHtml()` after they were produced by framework-controlle
 
 `oxlint` reports direct `safeHtml()` calls in app route, layout, and browser error-boundary modules. For intentionally reviewed exceptions, use a local `oxlint-disable-next-line elemental/no-unsafe-safe-html` comment and explain the trust boundary inline.
 
+### Declarative Shadow DOM
+
+Use `declarativeShadowDom()` when a custom element should paint its shadow content from SSR before the browser module upgrades it.
+
+```ts
+import { declarativeShadowDom, html } from "elemental";
+import sheet from "./card.css";
+
+export default function route() {
+  return html`
+    <user-card>
+      ${declarativeShadowDom({
+        content: html`<article><slot name="title"></slot></article>`,
+        styles: [sheet],
+      })}
+      <span slot="title">Hello</span>
+    </user-card>
+  `;
+}
+
+export class UserCard extends HTMLElement {
+  static tagName = "user-card";
+
+  connectedCallback() {
+    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+
+    if (sheet instanceof CSSStyleSheet) {
+      root.adoptedStyleSheets = [sheet];
+    }
+  }
+}
+```
+
+Server CSS imports are emitted as raw CSS inside the helper's generated `<style>` tags. Browser CSS imports remain `CSSStyleSheet` instances for upgraded custom elements. Client navigations parse DSD-bearing router payloads with native fragment parsing when available; unsupported browsers fall back to a full document navigation instead of inserting inert shadow templates.
+
 ## CSS Behavior
 
 - `layout.css` — emitted as a document stylesheet asset, injected in root-to-leaf layout order.
@@ -144,11 +179,12 @@ Only pass values to `safeHtml()` after they were produced by framework-controlle
 
 ### Rendering
 
-| Export       | Signature                                | Description                                                             |
-| ------------ | ---------------------------------------- | ----------------------------------------------------------------------- |
-| `html`       | ``html`...`: HtmlResult``                | Tagged template with auto-escaping, array flattening, attribute quoting |
-| `safeHtml`   | `safeHtml(value: string): SafeHtmlValue` | Bypass escaping for trusted HTML                                        |
-| `escapeHtml` | `escapeHtml(value: string): string`      | Escape `& < > " '`                                                      |
+| Export                 | Signature                                   | Description                                                             |
+| ---------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
+| `html`                 | ``html`...`: HtmlResult``                   | Tagged template with auto-escaping, array flattening, attribute quoting |
+| `safeHtml`             | `safeHtml(value: string): SafeHtmlValue`    | Bypass escaping for trusted HTML                                        |
+| `declarativeShadowDom` | `declarativeShadowDom(options): HtmlResult` | Emit a DSD `<template>` with optional scoped styles                     |
+| `escapeHtml`           | `escapeHtml(value: string): string`         | Escape `& < > " '`                                                      |
 
 ### Types
 

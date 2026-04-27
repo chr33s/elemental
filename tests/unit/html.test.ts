@@ -1,4 +1,11 @@
-import { HtmlResult, cssText, html, renderToString, safeHtml } from "elemental";
+import {
+  HtmlResult,
+  cssText,
+  declarativeShadowDom,
+  html,
+  renderToString,
+  safeHtml,
+} from "elemental";
 import { describe, expect, it } from "vitest";
 
 describe("html", () => {
@@ -60,6 +67,31 @@ describe("html", () => {
 
     expect(compactWhitespace(renderToString(result))).toBe(
       "<style>:host { color: tomato; & > span { display: block; } }</style>",
+    );
+  });
+
+  it("renders declarative shadow DOM with escaped content and raw branded styles", () => {
+    const result = declarativeShadowDom({
+      content: html`<span>${"<unsafe>"}</span>`,
+      styles: cssText(`:host { color: tomato; & > span { display: block; } }`),
+    });
+
+    expect(compactWhitespace(renderToString(result))).toBe(
+      '<template shadowrootmode="open"><style>:host { color: tomato; & > span { display: block; } }</style><span>&lt;unsafe&gt;</span></template>',
+    );
+  });
+
+  it("supports declarative shadow DOM mode and boolean attributes", () => {
+    const result = declarativeShadowDom({
+      clonable: true,
+      content: html`<p>Closed root</p>`,
+      delegatesFocus: true,
+      mode: "closed",
+      serializable: true,
+    });
+
+    expect(compactWhitespace(renderToString(result))).toBe(
+      '<template shadowrootmode="closed" shadowrootdelegatesfocus shadowrootclonable shadowrootserializable><p>Closed root</p></template>',
     );
   });
 

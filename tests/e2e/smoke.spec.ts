@@ -167,7 +167,40 @@ test("navigates into a nested dynamic guide route with loader data", async ({ pa
   await expect(page.getByRole("heading", { name: "Guide: Runtime SSR" })).toBeVisible();
   await expect(page.locator("#guide-topic")).toHaveText("runtime-ssr");
   await expect(page.locator("guide-callout")).toHaveAttribute("data-upgraded", "true");
-  await expect(page.locator("guide-callout")).toHaveText("Dynamic route upgrade");
+  await expect(page.locator("guide-callout [data-callout-label]")).toHaveText(
+    "Dynamic route upgrade",
+  );
+  await expect(
+    page.locator("guide-callout").evaluate((element) => element.shadowRoot !== null),
+  ).resolves.toBe(true);
+  await expect(
+    page.locator("guide-callout").evaluate((element) => {
+      const originalAttachShadowDescriptor = Object.getOwnPropertyDescriptor(
+        Element.prototype,
+        "attachShadow",
+      );
+      let attachShadowCalls = 0;
+
+      Object.defineProperty(Element.prototype, "attachShadow", {
+        configurable: true,
+        value(this: Element, init: ShadowRootInit) {
+          attachShadowCalls += 1;
+          return originalAttachShadowDescriptor?.value.call(this, init) as ShadowRoot;
+        },
+      });
+
+      try {
+        element.remove();
+        document.body.append(element);
+
+        return attachShadowCalls;
+      } finally {
+        if (originalAttachShadowDescriptor !== undefined) {
+          Object.defineProperty(Element.prototype, "attachShadow", originalAttachShadowDescriptor);
+        }
+      }
+    }),
+  ).resolves.toBe(0);
   await expectShellPreserved(page);
 });
 

@@ -1,0 +1,12 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+}
+
+strong {
+  display: inline-block;
+  padding: 0.25rem 0.45rem;
+  border-radius: 999px;
+  background: #dff8ec;
+  color: #155c43;
+}

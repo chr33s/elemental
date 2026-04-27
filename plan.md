@@ -599,6 +599,44 @@ Acceptance criteria:
 | 7   | Dev SSE no auth                          | Low      | `/__elemental/dev/events` has no authentication, but with the dev proxy bound to localhost-only, the exposure surface is limited to local processes.                                                                                                                                                                                                                                                         |
 | 8   | Production `startServer` binds `0.0.0.0` | Info     | Unlike the dev server, the production `startServer` binds to all interfaces by default. This is expected for production, but the `allowedHosts` / `ELEMENTAL_ALLOWED_HOSTS` mechanism is available to restrict it.                                                                                                                                                                                           |
 
+## Phase 15: Declarative Shadow DOM
+
+Deliverables:
+
+- First-class documented Declarative Shadow DOM (DSD) authoring pattern for route and layout output.
+- Public `declarativeShadowDom(...)` helper for ergonomic and safe DSD template emission.
+- Browser custom-element upgrade guidance that reuses existing declarative shadow roots.
+- DSD-aware client router insertion for partial payload navigations.
+- Coverage for SSR-first shadow rendering, scoped style behavior, and navigation/recovery integration.
+
+Tasks:
+
+- Document DSD as the preferred SSR pattern for custom element hosts when initial shadow markup should be visible before client upgrade.
+- Add docs examples for rendering `<template shadowrootmode="open">` with server CSS text and slot content.
+- Ensure custom elements in framework docs and fixtures use `this.shadowRoot ?? this.attachShadow({ mode: "open" })` so upgrades reuse server-provided roots.
+- Add a public `declarativeShadowDom(...)` helper that can compose `<template shadowrootmode="open">`, optional inline `<style>`, and escaped-by-default HTML content.
+- Keep the helper render-time only, using the existing `html`/`safeHtml` trust model without introducing post-render DOM mutation semantics.
+- Verify server CSS imports (raw text) remain directly usable inside declarative shadow `<style>` tags while browser CSS imports continue to resolve to `CSSStyleSheet`.
+- Parse DSD-bearing router payloads through native DSD-aware fragment parsing during client navigations instead of `innerHTML`.
+- Fall back to full document navigation when a client navigation receives DSD markup in a browser that cannot parse DSD during fragment insertion.
+- Add integration tests for DSD-first first paint, including route transitions that preserve expected shadow-root behavior after module registration.
+- Add regression tests that confirm no duplicate shadow root creation occurs during browser upgrade when declarative roots already exist.
+- Add compatibility notes and fallback guidance for environments without DSD support, including explicit progressive-enhancement expectations.
+- Treat deferred island activation as a follow-on capability: document the author-level pattern (visibility/idle/interaction-triggered activation) without introducing framework-managed island manifests in this phase.
+
+Acceptance criteria:
+
+- Elemental docs include a complete DSD authoring flow for route and layout output using existing SSR helpers.
+- `declarativeShadowDom(...)` is part of the public `elemental` API and returns an escaped-by-default `HtmlResult`.
+- SSR can emit visible shadow DOM content and scoped styles before client-side custom element registration.
+- Partial router payloads containing DSD templates materialize real shadow roots in browsers with native fragment DSD parsing support.
+- Browsers without native fragment DSD parsing support fall back to full document navigation for DSD-bearing partial payloads.
+- Browser upgrades reuse existing declarative shadow roots and do not call `attachShadow()` when `shadowRoot` is already present.
+- Scoped styling behavior remains consistent with current target split: server emits inline CSS text and browser uses `CSSStyleSheet` for upgraded behavior.
+- Router navigation and error recovery flows continue to function with DSD-authored custom element hosts.
+- The phase introduces no new server/client manifest divergence and no new dynamic import surfaces beyond current trust boundaries.
+- Deferred activation is documented as an opt-in authoring pattern, while framework-managed island scheduling remains out of scope for this phase.
+
 ## Cross-Cutting Rules
 
 These rules should be enforced throughout the implementation:

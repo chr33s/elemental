@@ -58,6 +58,49 @@ describe("client error recovery helpers", () => {
     expect(calls).toEqual(["outlet:<main>alpha</main>", "head:<title>alpha</title>"]);
   });
 
+  it("renders declarative shadow DOM from browser error boundaries", async () => {
+    const route = createRoute({
+      browserBoundaryModules: ["assets/error.js"],
+      browserBoundarySources: ["app/src/error.ts"],
+      pattern: "/recover",
+      source: "app/src/recover/index.ts",
+    });
+    const manifest = createManifest([route]);
+    const calls: string[] = [];
+
+    const recovered = await recoverFromClientError({
+      error: new Error("boom"),
+      fallback: () => {
+        calls.push("fallback");
+      },
+      manifest,
+      matchedRoute: {
+        params: {},
+        route,
+      },
+      renderHead: (head) => {
+        calls.push(`head:${head}`);
+      },
+      renderOutlet: (outlet) => {
+        calls.push(`outlet:${outlet}`);
+      },
+      resolver: async () => ({
+        default() {
+          return html`<error-card
+            ><template shadowrootmode="open"><p>Recovered</p></template></error-card
+          >`;
+        },
+      }),
+      url: new URL("http://example.com/recover"),
+    });
+
+    expect(recovered).toBe(true);
+    expect(compactHtml(calls[0] ?? "")).toBe(
+      'outlet:<error-card><template shadowrootmode="open"><p>Recovered</p></template></error-card>',
+    );
+    expect(calls[1]).toBe("head:");
+  });
+
   it("resolves unmatched client failures through the nearest dynamic ancestor boundary", async () => {
     const route = createRoute({
       browserBoundaryModules: ["assets/root-error.js", "assets/blog-slug-error.js"],
@@ -162,4 +205,8 @@ function createManifest(routes: ReturnType<typeof createBaseManifest>["routes"])
     },
     generatedAt: "2026-04-12T00:00:00.000Z",
   });
+}
+
+function compactHtml(value: string): string {
+  return value.replaceAll(/>\s+</g, "><").replaceAll(/\s+>/g, ">").trim();
 }

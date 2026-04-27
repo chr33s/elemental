@@ -41,6 +41,18 @@ interface ViewTransitionLike {
   finished: Promise<void>;
 }
 
+interface ElementWithUnsafeHtmlFragmentParsing extends HTMLElement {
+  setHTMLUnsafe(markup: string): void;
+}
+
+const DECLARATIVE_SHADOW_DOM_TEMPLATE_PATTERN = /<template\b[^>]*\bshadowrootmode\s*=/iu;
+
+class UnsupportedDeclarativeShadowDomNavigationError extends Error {
+  constructor() {
+    super("Declarative Shadow DOM router payloads require Element.setHTMLUnsafe().");
+  }
+}
+
 export function installNavigationInterceptors(state: BootstrapState): void {
   const navigationApi = getNavigationApi();
 
@@ -273,6 +285,11 @@ async function applyNavigationPayload(
     applyHistory(finalUrl, history);
     state.currentRoute = finalRoute ?? matchedRoute;
   } catch (error) {
+    if (error instanceof UnsupportedDeclarativeShadowDomNavigationError) {
+      fallbackToDocumentNavigation(finalUrl, history === "replace");
+      return;
+    }
+
     await recoverFromClientError({
       error,
       fallback: () => {
@@ -314,7 +331,28 @@ function renderRouteOutlet(outlet: string): void {
 
   // Security-sensitive sink: router payload outlet HTML must be framework-generated
   // or sanitized before it reaches this point.
+  if (containsDeclarativeShadowDom(outlet)) {
+    if (!supportsUnsafeHtmlFragmentParsing(routeOutlet)) {
+      throw new UnsupportedDeclarativeShadowDomNavigationError();
+    }
+
+    routeOutlet.setHTMLUnsafe(outlet);
+    return;
+  }
+
   routeOutlet.innerHTML = outlet;
+}
+
+function containsDeclarativeShadowDom(markup: string): boolean {
+  return DECLARATIVE_SHADOW_DOM_TEMPLATE_PATTERN.test(markup);
+}
+
+function supportsUnsafeHtmlFragmentParsing(
+  element: HTMLElement,
+): element is ElementWithUnsafeHtmlFragmentParsing {
+  return (
+    typeof (element as Partial<ElementWithUnsafeHtmlFragmentParsing>).setHTMLUnsafe === "function"
+  );
 }
 
 function registerCustomElements(moduleNamespace: BrowserModuleNamespace): void {

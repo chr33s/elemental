@@ -1,4 +1,5 @@
-import { html, type RouteProps } from "elemental";
+import { declarativeShadowDom, html, type RouteProps } from "elemental";
+import calloutSheet from "./callout.css";
 
 interface GuideData {
   bullets?: unknown;
@@ -20,8 +21,29 @@ export class GuideCallout extends HTMLElement {
   static tagName = "guide-callout";
 
   connectedCallback() {
+    const label = this.getAttribute("label") ?? "Guide loaded";
+    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+
+    if (calloutSheet instanceof CSSStyleSheet) {
+      root.adoptedStyleSheets = [calloutSheet];
+    }
+
+    const labelNode = root.querySelector("[data-callout-label]");
+
     this.dataset.upgraded = "true";
-    this.textContent = this.getAttribute("label") ?? "Guide loaded";
+
+    if (labelNode !== null) {
+      labelNode.textContent = label;
+      return;
+    }
+
+    root.textContent = "";
+
+    const fallbackLabel = document.createElement("strong");
+
+    fallbackLabel.dataset.calloutLabel = "";
+    fallbackLabel.textContent = label;
+    root.append(fallbackLabel);
   }
 }
 
@@ -41,7 +63,12 @@ export default function guideTopic(props: RouteProps) {
       <h1>${title}</h1>
       <p id="guide-topic">${topic}</p>
       <p>${summary}</p>
-      <guide-callout label="Dynamic route upgrade">Pending upgrade</guide-callout>
+      <guide-callout label="Dynamic route upgrade">
+        ${declarativeShadowDom({
+          content: html`<strong data-callout-label>Pending upgrade</strong>`,
+          styles: [calloutSheet],
+        })}
+      </guide-callout>
       <ul class="guide-points">
         ${bullets.map((bullet) => html`<li>${bullet}</li>`)}
       </ul>

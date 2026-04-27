@@ -35,7 +35,7 @@ src/
       errors.ts                 # Client-side error recovery
       forms.ts                  # Same-origin form interception helpers
       head.ts                   # Managed head and stylesheet synchronization
-      navigation.ts             # Client navigation and document replacement flow
+      navigation.ts             # Client navigation, DSD-aware swaps, and document replacement flow
       register-elements.ts      # Custom element detection and registration
     server/
       app.ts                    # Server exports (public API)
@@ -50,7 +50,7 @@ src/
     shared/
       browser-runtime.ts        # Browser runtime constants
       error-boundaries.ts       # Error boundary resolution
-      html.ts                   # HTML tagged template and escaping
+      html.ts                   # HTML tagged template, escaping, cssText, and DSD helper
       responses.ts              # Shared HTML and text response helpers
       routes.ts                 # Route matching utilities
       types.ts                  # Shared TypeScript types
@@ -109,7 +109,7 @@ src/runtime/client/
 The client runtime is split by responsibility:
 
 - `bootstrap.ts` wires startup and exposes the browser runtime API
-- `navigation.ts` owns client transitions, partial payload application, and document fallbacks
+- `navigation.ts` owns client transitions, partial payload application, DSD-aware outlet insertion, and document fallbacks
 - `head.ts` owns managed `<head>` markers and stylesheet synchronization
 - `forms.ts` owns request shaping for enhanced same-origin forms
 - `register-elements.ts` owns custom element collection and registration
@@ -119,6 +119,7 @@ The client runtime is split by responsibility:
 - The browser runtime still behaves as one cohesive system, but the files now align with the main responsibilities in the plan
 - Test-facing helpers stay reachable through `bootstrap.ts` via re-exports, so the public surface does not change
 - Navigation remains the coordinator, while head/forms/registration stay reusable and smaller
+- Declarative Shadow DOM payloads stay inside the navigation boundary: DSD-bearing partial responses use native fragment parsing when available and fall back to full document navigation when unavailable
 
 **Impact:** Medium - easier maintenance and clearer internal ownership
 
@@ -332,6 +333,8 @@ Types are organized by usage:
    - CSS module declarations
    - Global augmentations
 
+Public rendering helpers such as `html`, `safeHtml`, `cssText`, and `declarativeShadowDom` live in `src/runtime/shared/html.ts` and are exported from `src/index.ts`. `declarativeShadowDom(...)` remains a render-time helper: it returns an `HtmlResult`, uses the same escaped-by-default content model as `html`, and relies on `cssText()`-branded server CSS values for raw style emission inside generated `<style>` tags.
+
 ## Testing Architecture
 
 Tests are organized by concern:
@@ -341,18 +344,19 @@ tests/
   unit/
     build.test.ts              # Build pipeline, discovery, validation
     client-bootstrap.test.ts   # Custom element registration
+    client-navigation.test.ts  # Client navigation, DSD-aware swaps, fallbacks
     client-errors.test.ts      # Client error recovery
     deployment-fixtures.test.ts # Deployment smoke tests
     dev.test.ts                # Development server utilities
     error-runtime.test.ts      # Error boundary resolution
-    html.test.ts               # HTML escaping and rendering
+    html.test.ts               # HTML escaping, rendering, DSD helper
     render-document.test.ts    # Document rendering
     routes.test.ts             # Route matching
     server-runtime.test.ts     # Server request handling
     universal-targets.test.ts  # Node + Worker parity
   e2e/
     dev.spec.ts                # Development mode end-to-end
-    smoke.spec.ts              # Browser navigation, forms, recovery
+    smoke.spec.ts              # Browser navigation, DSD, forms, recovery
 ```
 
 ### Test Strategy
@@ -361,6 +365,7 @@ tests/
 - **E2E tests** verify browser integration
 - **Deployment tests** verify packaging
 - **Universal tests** verify Node/Worker parity
+- **DSD coverage** verifies helper output, partial-navigation parsing/fallbacks, and the basic app's shadow-root upgrade path
 
 ## Future Considerations
 
@@ -394,4 +399,4 @@ When splitting modules:
 
 The actual implementation prioritizes cohesion and simplicity over strict adherence to the planned file structure. All functionality from the plan exists and is well-tested - it's just organized slightly differently.
 
-This architecture has proven maintainable through 13 implementation phases while keeping the codebase under 2,000 lines of runtime code. The consolidation decisions have not caused maintainability issues and can be revisited if modules grow significantly.
+This architecture has proven maintainable through 15 implementation phases while keeping the codebase under 2,000 lines of runtime code. The consolidation decisions have not caused maintainability issues and can be revisited if modules grow significantly.
