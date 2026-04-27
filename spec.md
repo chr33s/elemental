@@ -32,6 +32,7 @@ v0 intentionally focuses on a single rendering model: runtime SSR. There is no m
 - Use `index.ts` as the default route render module.
 - Use `layout.ts` as the default layout render module.
 - Support `import { declarativeShadowDom, html, safeHtml } from 'elemental';` for route and layout rendering.
+- Support framework-managed islands via `import { island, deferActivation } from 'elemental';` for opt-in deferred client activation.
 - Escape interpolated values by default unless explicitly marked safe.
 - Support client-side navigation and route transitions.
 - Support native custom element upgrade in the browser.
@@ -113,6 +114,11 @@ src/
       index.ts
       index.server.ts
       post.css
+
+  islands/
+    card.ts
+    charts/
+      line.ts
 ```
 
 ### File meanings
@@ -123,6 +129,7 @@ src/
 - `error.server.ts`: server-side subtree error render module.
 - `index.ts`: route render module and client component module.
 - `index.server.ts`: route server module.
+- `islands/**/*.ts`: framework-managed island modules. Each file becomes one island whose id is its relative path under `islands/` without the `.ts` extension. Each module must export `mount(host, props)` (or a default function with the same signature). `*.server.ts` files inside `islands/` are excluded.
 - any other `*.css`: scoped CSS module.
 
 Any directory may define its own `layout.ts`, `layout.css`, `error.ts`, and `error.server.ts`, allowing nested layouts plus separate browser-side and server-side error handling.
@@ -452,6 +459,76 @@ export default function route() {
 ```
 
 Browser route transitions must use native DSD-aware fragment parsing for router payloads that contain `<template shadowrootmode="...">`. If a browser cannot parse DSD during fragment insertion, Elemental must fall back to full document navigation rather than inserting inert shadow templates.
+
+### Deferred activation
+
+Elemental supports two cooperating mechanisms for delaying browser-side work after SSR:
+
+1. **`deferActivation(...)` helper.** A standalone client primitive that gates a callback behind one of four strategies: `eager` (default), `idle`, `interaction`, or `visible`. The returned controller activates at most once per connected lifetime, tears down observers and listeners on `cancel()` or via `AbortSignal`, and falls back to eager activation when the underlying browser primitive (`IntersectionObserver`, `requestIdleCallback`) is not available. Authors can use `deferActivation()` from within an auto-registered custom element to defer expensive setup such as dynamic `import()` of heavy logic.
+
+2. **Framework-managed islands.** A first-class build and runtime contract for hosts whose browser logic should ship as its own module. Authors place island modules under `<appDir>/islands/` (for example `islands/card.ts`, `islands/charts/line.ts`); each file becomes one island whose id is the relative path without the `.ts` extension. The build emits one browser bundle per island and records it in the build manifest under `manifest.islands[id]`.
+
+### Islands
+
+#### Server `island(...)` helper
+
+```ts
+import { html, island } from "elemental";
+
+export default function route() {
+  return html`
+    <section>
+      ${island({
+        id: "card",
+        props: { highlighted: true },
+        strategy: "visible",
+        content: html`<article slot="static">Server-rendered shell</article>`,
+      })}
+    </section>
+  `;
+}
+```
+
+`island()` emits a host element carrying deterministic `data-elemental-island`, `data-elemental-island-strategy`, and (when `props` is provided) an inert `<template data-elemental-island-props>` payload whose content is JSON with `<` escaped to `\u003c`. The helper validates `id` against `^[a-z0-9](?:[a-z0-9/_-]*[a-z0-9])?$`, validates `strategy` against the four supported values, and rejects malformed `tagName` overrides.
+
+#### Island module contract
+
+Each `<appDir>/islands/**/*.ts` file (excluding `*.server.ts`) must export either a named `mount` function or a default function with the signature:
+
+```ts
+export function mount(host: HTMLElement, props: unknown): void | Promise<void>;
+```
+
+The framework calls `mount(host, props)` exactly once per host, after the chosen activation strategy fires, then tags the host with `data-elemental-island-active`.
+
+#### Build manifest extension
+
+The build manifest gains a required `islands` field:
+
+```ts
+type BuildManifestIsland = {
+  css?: string[];
+  js: string;
+  source: string;
+};
+
+type PublicBuildManifestIsland = {
+  css?: string[];
+  js: string;
+};
+```
+
+`source` is a build-only field stripped from the public client manifest. The browser receives only `js` (and any required `css`).
+
+#### Activation lifecycle and navigation
+
+The client island runtime scans for island markers on initial bootstrap and after every client navigation. A per-host `WeakMap<HTMLElement, DeferredActivationController>` ensures that:
+
+- a host is never mounted twice,
+- pending observers and listeners are torn down when an island is removed before activation,
+- re-inserted hosts re-arm activation against the new connected lifetime.
+
+Island module resolution is constrained to manifest-listed entries; unknown ids are skipped with a console warning rather than triggering an arbitrary dynamic `import()`.
 
 ### Named exports for client components
 

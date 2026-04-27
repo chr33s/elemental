@@ -25,12 +25,19 @@ export interface BuildManifestRoute {
   serverSource?: string;
 }
 
+export interface BuildManifestIsland {
+  css?: string[];
+  js: string;
+  source: string;
+}
+
 export interface BuildManifest {
   appDir: string;
   assets: {
     clientEntry?: string;
   };
   generatedAt: string;
+  islands: Record<string, BuildManifestIsland>;
   routes: BuildManifestRoute[];
 }
 
@@ -41,20 +48,34 @@ export interface PublicBuildManifestRoute {
   pattern: string;
 }
 
+export interface PublicBuildManifestIsland {
+  css?: string[];
+  js: string;
+}
+
 export interface PublicBuildManifest {
   appDir: string;
   assets: BuildManifest["assets"];
   generatedAt: string;
+  islands: Record<string, PublicBuildManifestIsland>;
   routes: PublicBuildManifestRoute[];
 }
 
 export function createPublicManifest(manifest: BuildManifest): PublicBuildManifest {
+  const islands: Record<string, PublicBuildManifestIsland> = {};
+
+  for (const [id, entry] of Object.entries(manifest.islands)) {
+    islands[id] =
+      entry.css === undefined ? { js: entry.js } : { css: [...entry.css], js: entry.js };
+  }
+
   return {
     appDir: manifest.appDir,
     assets: {
       clientEntry: manifest.assets.clientEntry,
     },
     generatedAt: manifest.generatedAt,
+    islands,
     routes: manifest.routes.map((route) => ({
       assets: route.assets,
       browser: {

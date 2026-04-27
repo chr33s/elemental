@@ -1,8 +1,9 @@
 import path from "node:path";
 import { toPosixPath } from "../shared/path-utils.ts";
+import type { DiscoveredIsland } from "./discover-islands.ts";
 import type { DiscoveredRoute } from "./discover.ts";
 import { requireEntryOutput, requireServerModuleId } from "./entry-points.ts";
-import type { BuildManifest } from "./manifest.ts";
+import type { BuildManifest, BuildManifestIsland } from "./manifest.ts";
 
 export function createManifestRoute(options: {
   browserOutputs: Map<string, string>;
@@ -76,6 +77,26 @@ export function createManifestRoute(options: {
     serverSource: route.serverFilePath ? relativize(route.serverFilePath) : undefined,
     source: relativize(route.filePath),
   };
+}
+
+export function createManifestIslands(options: {
+  browserOutputs: Map<string, string>;
+  islands: DiscoveredIsland[];
+  rootDir: string;
+}): Record<string, BuildManifestIsland> {
+  const { browserOutputs, islands, rootDir } = options;
+  const result: Record<string, BuildManifestIsland> = {};
+
+  for (const island of islands) {
+    const js = requireEntryOutput(browserOutputs, island.filePath, `island module ${island.id}`);
+
+    result[island.id] = {
+      js,
+      source: toPosixPath(path.relative(rootDir, island.filePath)),
+    };
+  }
+
+  return result;
 }
 
 export function createWorkerManifest(

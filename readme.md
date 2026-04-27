@@ -170,6 +170,92 @@ export class UserCard extends HTMLElement {
 
 Server CSS imports are emitted as raw CSS inside the helper's generated `<style>` tags. Browser CSS imports remain `CSSStyleSheet` instances for upgraded custom elements. Client navigations parse DSD-bearing router payloads with native fragment parsing when available; unsupported browsers fall back to a full document navigation instead of inserting inert shadow templates.
 
+#### Deferred Activation
+
+Two cooperating mechanisms ship in the public API:
+
+1. **`deferActivation(...)`** — a standalone client primitive for delaying browser-side work inside an auto-registered custom element.
+2. **`island(...)` plus `<appDir>/islands/`** — framework-managed island modules with their own browser bundles, manifest entries, and shared activation runtime.
+
+##### `deferActivation()` from within a custom element
+
+```ts
+import { deferActivation } from "elemental";
+
+export class UserCard extends HTMLElement {
+  static tagName = "user-card";
+
+  #controller?: ReturnType<typeof deferActivation>;
+
+  connectedCallback() {
+    this.#controller = deferActivation({
+      element: this,
+      strategy: "visible",
+      activate: async () => {
+        const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+        const { mount } = await import("./user-card.client.ts");
+        mount(root, this);
+      },
+    });
+  }
+
+  disconnectedCallback() {
+    this.#controller?.cancel();
+  }
+}
+```
+
+`deferActivation()` supports four strategies — `eager` (default), `idle`, `interaction`, `visible` — runs `activate()` at most once per controller, tears down observers/listeners on `cancel()` or via `AbortSignal`, and falls back to eager activation when the underlying browser primitive (`IntersectionObserver`, `requestIdleCallback`) is missing.
+
+The companion `readActivationStrategy(element, fallback?)` helper reads the `data-activate` attribute (`eager` | `idle` | `interaction` | `visible`) and returns a validated strategy, so a custom element can honor the same authoring convention used by framework-managed island hosts:
+
+```ts
+import { deferActivation, readActivationStrategy } from "elemental";
+
+connectedCallback() {
+  this.#controller = deferActivation({
+    element: this,
+    strategy: readActivationStrategy(this),
+    activate: () => {/* ... */},
+  });
+}
+```
+
+Authors then opt in via markup: `<user-card data-activate="visible">…</user-card>`.
+
+##### Framework-managed islands
+
+Place island modules under `<appDir>/islands/`. Each file becomes one island whose id is the relative path without the `.ts` extension (`islands/card.ts` → `card`, `islands/charts/line.ts` → `charts/line`). Each module must export a `mount` function (or a default function with the same signature):
+
+```ts
+// src/islands/card.ts
+export function mount(host: HTMLElement, props: unknown) {
+  host.dataset.mountedAt = String(Date.now());
+  host.textContent = JSON.stringify(props);
+}
+```
+
+Render the host with the server `island()` helper:
+
+```ts
+import { html, island } from "elemental";
+
+export default function route() {
+  return html`
+    <section>
+      ${island({
+        id: "card",
+        props: { highlighted: true },
+        strategy: "visible",
+        content: html`<article>Server-rendered shell</article>`,
+      })}
+    </section>
+  `;
+}
+```
+
+The build emits one browser bundle per island and records it in `manifest.islands[id]`. The client island runtime activates each host according to its strategy on initial bootstrap and after every client navigation, mounts it exactly once per connected lifetime, and tags it with `data-elemental-island-active` when complete. Module resolution is constrained to manifest-listed ids, preserving the framework's manifest-driven trust boundary for dynamic `import()`.
+
 ## CSS Behavior
 
 - `layout.css` — emitted as a document stylesheet asset, injected in root-to-leaf layout order.
@@ -227,12 +313,16 @@ Rules apply by filename convention (`index.ts`, `index.server.ts`, `layout.ts`, 
 
 ### Rendering
 
-| Export                 | Signature                                   | Description                                                             |
-| ---------------------- | ------------------------------------------- | ----------------------------------------------------------------------- |
-| `html`                 | ``html`...`: HtmlResult``                   | Tagged template with auto-escaping, array flattening, attribute quoting |
-| `safeHtml`             | `safeHtml(value: string): SafeHtmlValue`    | Bypass escaping for trusted HTML                                        |
-| `declarativeShadowDom` | `declarativeShadowDom(options): HtmlResult` | Emit a DSD `<template>` with optional scoped styles                     |
-| `escapeHtml`           | `escapeHtml(value: string): string`         | Escape `& < > " '`                                                      |
+| Export                   | Signature                                       | Description                                                             |
+| ------------------------ | ----------------------------------------------- | ----------------------------------------------------------------------- |
+| `html`                   | ``html`...`: HtmlResult``                       | Tagged template with auto-escaping, array flattening, attribute quoting |
+| `safeHtml`               | `safeHtml(value: string): SafeHtmlValue`        | Bypass escaping for trusted HTML                                        |
+| `declarativeShadowDom`   | `declarativeShadowDom(options): HtmlResult`     | Emit a DSD `<template>` with optional scoped styles                     |
+| `escapeHtml`             | `escapeHtml(value: string): string`             | Escape `& < > " '`                                                      |
+| `island`                 | `island(options): HtmlResult`                   | Emit a framework-managed island host with strategy and serialized props |
+| `serializeIslandProps`   | `serializeIslandProps(value): string`           | JSON-encode island props with `<` escaped to `\u003c`                   |
+| `deferActivation`        | `deferActivation(options): Controller`          | Strategy-based activation gate (`eager`/`idle`/`interaction`/`visible`) |
+| `readActivationStrategy` | `readActivationStrategy(el, fallback?): string` | Read a validated activation strategy from the `data-activate` attribute |
 
 ### Types
 

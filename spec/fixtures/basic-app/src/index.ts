@@ -1,4 +1,4 @@
-import { html } from "elemental";
+import { html, island } from "elemental";
 
 const featureCards = [
   {
@@ -41,6 +41,12 @@ export default function index() {
         Response-driven form actions, client-side navigation, and browser error recovery.
       </p>
       <fixture-greeting message="Router ready">Pending upgrade</fixture-greeting>
+      ${island({
+        id: "feature-card",
+        props: { message: "Island activated on visibility" },
+        strategy: "visible",
+        content: html`<span>Pending island activation</span>`,
+      })}
       <div class="feature-grid">
         ${featureCards.map(
           (card) => html`

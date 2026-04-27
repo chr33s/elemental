@@ -3,9 +3,11 @@ import { normalizeManifestRouteAssets } from "../shared/manifest-assets.ts";
 import { createRouterRequestHeaders, isRouterPayloadResponse } from "../shared/router-protocol.ts";
 import { matchManifestRoute, type MatchedManifestRoute } from "../shared/routes.ts";
 import type { RouterPayload } from "../shared/types.ts";
+import type { DeferredActivationController } from "./defer-activation.ts";
 import { recoverFromClientError } from "./errors.ts";
 import { createFormSubmission, type FormNavigationSubmission } from "./forms.ts";
 import { normalizeAssetHref, renderManagedHead, syncManagedStylesheets } from "./head.ts";
+import { activateIslands, type IslandModule } from "./islands.ts";
 import {
   registerCustomElementDefinitions,
   type BrowserModuleNamespace,
@@ -17,6 +19,7 @@ type PublicManifestRoute = PublicBuildManifest["routes"][number];
 
 export interface BootstrapState {
   currentRoute?: MatchedManifestRoute<PublicManifestRoute>;
+  islandControllers: WeakMap<HTMLElement, DeferredActivationController>;
   loadedScriptModules: Set<string>;
   manifest: PublicBuildManifest;
 }
@@ -284,6 +287,7 @@ async function applyNavigationPayload(
     removeObsoleteStylesheets();
     applyHistory(finalUrl, history);
     state.currentRoute = finalRoute ?? matchedRoute;
+    activateIslandsForState(state, document);
   } catch (error) {
     if (error instanceof UnsupportedDeclarativeShadowDomNavigationError) {
       fallbackToDocumentNavigation(finalUrl, history === "replace");
@@ -357,6 +361,15 @@ function supportsUnsafeHtmlFragmentParsing(
 
 function registerCustomElements(moduleNamespace: BrowserModuleNamespace): void {
   registerCustomElementDefinitions(moduleNamespace, customElements, HTMLElement);
+}
+
+function activateIslandsForState(state: BootstrapState, root: Document | Element): void {
+  activateIslands({
+    controllers: state.islandControllers,
+    manifest: state.manifest.islands,
+    resolver: (modulePath) => resolveBrowserModule<IslandModule>(modulePath),
+    root,
+  });
 }
 
 function resolveBrowserModule<TModule>(modulePath: string): Promise<TModule> {

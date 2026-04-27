@@ -2,6 +2,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { build as esbuild } from "esbuild";
 import { toPosixPath } from "../shared/path-utils.ts";
+import { discoverIslands } from "./discover-islands.ts";
 import { discoverRoutes } from "./discover.ts";
 import {
   collectBrowserModulePaths,
@@ -12,7 +13,11 @@ import {
   requireEntryOutput,
 } from "./entry-points.ts";
 import { emitLayoutStylesheetAssets } from "./layout-stylesheets.ts";
-import { createManifestRoute, createWorkerManifest } from "./manifest-routes.ts";
+import {
+  createManifestIslands,
+  createManifestRoute,
+  createWorkerManifest,
+} from "./manifest-routes.ts";
 import { type BuildManifest } from "./manifest.ts";
 import { createCssModulePlugin } from "./plugins/css.ts";
 import {
@@ -73,6 +78,8 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
     throw new Error(`No routes were discovered under ${appDir}`);
   }
 
+  const islands = await discoverIslands(appDir);
+
   await buildPackageEntrypoints(packageEntryPath, cliEntryPath, outDir);
 
   const layoutStylesheetAssets = await emitLayoutStylesheetAssets(
@@ -86,6 +93,7 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
       clientBootstrapPath,
       ...(options.includeDevClient === true ? [devClientPath] : []),
       ...collectBrowserModulePaths(routes),
+      ...islands.map((island) => island.filePath),
     ],
     rootDir,
   );
@@ -159,6 +167,11 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
       clientEntry: clientAssetRelativePath,
     },
     generatedAt: new Date().toISOString(),
+    islands: createManifestIslands({
+      browserOutputs,
+      islands,
+      rootDir,
+    }),
     routes: routes.map((route) =>
       createManifestRoute({
         browserOutputs,

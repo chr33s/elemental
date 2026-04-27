@@ -20,7 +20,8 @@ src/
   build/
     index.ts                    # Main build orchestration
     discover.ts                 # Route discovery and validation
-    manifest.ts                 # Manifest types and writing
+    discover-islands.ts         # Island module discovery (<appDir>/islands/**)
+    manifest.ts                 # Manifest types and writing (routes + islands)
     oxc.ts                      # AST transforms (strip custom elements)
     plugins/
       css.ts                    # CSS import handling for browser/server targets
@@ -31,10 +32,12 @@ src/
   runtime/
     client/
       bootstrap.ts              # Client runtime entrypoint and public helper re-exports
+      defer-activation.ts       # Strategy-based activation gate (eager/idle/interaction/visible)
       dev-client.ts             # Development client (SSE, HMR)
       errors.ts                 # Client-side error recovery
       forms.ts                  # Same-origin form interception helpers
       head.ts                   # Managed head and stylesheet synchronization
+      islands.ts                # Client island activation runtime
       navigation.ts             # Client navigation, DSD-aware swaps, and document replacement flow
       register-elements.ts      # Custom element detection and registration
     server/
@@ -51,6 +54,7 @@ src/
       browser-runtime.ts        # Browser runtime constants
       error-boundaries.ts       # Error boundary resolution
       html.ts                   # HTML tagged template, escaping, cssText, and DSD helper
+      islands.ts                # Server island() helper, manifest types, marker constants
       responses.ts              # Shared HTML and text response helpers
       routes.ts                 # Route matching utilities
       types.ts                  # Shared TypeScript types
@@ -243,6 +247,34 @@ Navigation → Error → Find nearest error.ts → Render in outlet → Update h
 - Can update head via `head()` export
 - Falls back to full page reload if error boundary throws
 
+## Island Architecture
+
+Islands are framework-managed deferred-activation modules. They share the route discovery, manifest, and asset pipelines rather than introducing a parallel build system.
+
+### Discovery
+
+`discoverIslands(appDir)` walks `<appDir>/islands/**/*.ts` (excluding `*.server.ts`). Each file becomes an `IslandManifestEntry` whose id is the relative path under `islands/` without the extension. Ids are validated against `^[a-z0-9](?:[a-z0-9/_-]*[a-z0-9])?$`, duplicate ids are rejected, and each module is run through `validateModuleWithOxc` so the same import-boundary rules apply.
+
+### Build pipeline
+
+Discovered island file paths are appended to the existing `browserEntryPoints` array passed to esbuild, so islands share the same CSS plugin, server-boundary plugin, and asset deduplication path as routes. The build manifest gains a required `islands: Record<string, BuildManifestIsland>` field; the public client manifest mirrors it without the build-only `source` field.
+
+CSS imported by an island module is bundled into the same JS chunk: the framework's CSS plugin (`src/build/plugins/css.ts`) compiles `.css` imports into inline `new CSSStyleSheet()` constructors that adopt themselves into the host's root via `adoptedStyleSheets`. There is no separate `.css` asset emitted per island and therefore no `<link>` injection is required on activation. The `BuildManifestIsland.css?` field is reserved for future build modes that opt out of inline-stylesheet bundling.
+
+### Server emission
+
+The `island({ id, props, strategy, content, tagName })` helper in `src/runtime/shared/islands.ts` emits a host element with deterministic `data-elemental-island`, `data-elemental-island-strategy`, and (when `props` is provided) an inert `<template data-elemental-island-props>` payload. The serialized props payload is JSON with `<` escaped to `\u003c` so the inert template cannot be terminated early.
+
+### Client activation
+
+`activateIslands({ root, manifest, resolver, controllers })` in `src/runtime/client/islands.ts` scans for island markers, looks up entries in the public manifest, and creates one `DeferredActivationController` per host via `deferActivation()`. The bootstrap and navigation paths share a single `WeakMap<HTMLElement, DeferredActivationController>` so:
+
+- a host is never mounted twice across initial load and subsequent navigations,
+- pending observers and listeners are torn down when an island is removed before activation,
+- re-inserted hosts re-arm activation against the new connected lifetime.
+
+Module resolution is constrained to manifest-listed entries; unknown ids are skipped with a console warning. The `deferActivation()` primitive itself is exported standalone so authors can use the same activation machinery from inside an auto-registered custom element without opting into the island manifest.
+
 ## Development Mode Architecture
 
 `elemental dev` orchestrates three separate systems:
@@ -344,12 +376,15 @@ tests/
   unit/
     build.test.ts              # Build pipeline, discovery, validation
     client-bootstrap.test.ts   # Custom element registration
-    client-navigation.test.ts  # Client navigation, DSD-aware swaps, fallbacks
     client-errors.test.ts      # Client error recovery
+    client-islands.test.ts     # Client island runtime, activation idempotency
+    client-navigation.test.ts  # Client navigation, DSD-aware swaps, fallbacks
+    defer-activation.test.ts   # deferActivation() strategy gate
     deployment-fixtures.test.ts # Deployment smoke tests
     dev.test.ts                # Development server utilities
     error-runtime.test.ts      # Error boundary resolution
     html.test.ts               # HTML escaping, rendering, DSD helper
+    islands.test.ts            # Server island() helper, marker emission
     render-document.test.ts    # Document rendering
     routes.test.ts             # Route matching
     server-runtime.test.ts     # Server request handling

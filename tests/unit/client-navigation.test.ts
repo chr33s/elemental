@@ -312,6 +312,7 @@ describe("client navigation helpers", () => {
 
 function createBootstrapState(manifest: BuildManifest): BootstrapState {
   return {
+    islandControllers: new WeakMap(),
     loadedScriptModules: new Set<string>(),
     manifest,
   };

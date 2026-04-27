@@ -29,6 +29,7 @@ export function createManifest(
     appDir: options.appDir ?? "app/src",
     assets: options.assets ?? {},
     generatedAt: options.generatedAt ?? "2026-04-16T00:00:00.000Z",
+    islands: {},
     routes,
   };
 }

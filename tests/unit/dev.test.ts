@@ -12,6 +12,7 @@ const baseManifest: BuildManifest = {
     clientEntry: "assets/bootstrap.js",
   },
   generatedAt: "2026-04-13T00:00:00.000Z",
+  islands: {},
   routes: [
     {
       assets: {

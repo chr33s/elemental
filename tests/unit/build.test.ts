@@ -708,6 +708,52 @@ export default function home() {
     expect(consumerManifest.routes[0]?.server.route).toMatch(/^server\/.+\.js$/u);
     expect(consumerManifest.routes[0]?.browser.route).toMatch(/^assets\/.+\.js$/u);
   });
+
+  it("emits an island manifest entry for each discovered island module", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase16-islands-app-"));
+    const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase16-islands-dist-"));
+    temporaryPaths.add(appDir);
+    temporaryPaths.add(outDir);
+
+    await writeRouteModule(
+      appDir,
+      "index.ts",
+      `import { html, island } from "elemental";
+
+export default function home() {
+  return html\`${"${"}island({ id: "card", props: { id: 1 }, strategy: "visible" })}\`;
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "islands/card.ts",
+      `export function mount(host, props) {
+  host.dataset.mounted = JSON.stringify(props);
+}
+`,
+    );
+    await writeRouteModule(
+      appDir,
+      "islands/charts/line.ts",
+      `export function mount(host) {
+  host.dataset.mounted = "line";
+}
+`,
+    );
+
+    const result = await buildProject({
+      appDir,
+      outDir,
+      rootDir,
+    });
+    const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as BuildManifest;
+
+    expect(Object.keys(manifest.islands).sort()).toEqual(["card", "charts/line"]);
+    expect(manifest.islands.card?.js).toMatch(/^assets\/.+\.js$/u);
+    expect(manifest.islands["charts/line"]?.js).toMatch(/^assets\/.+\.js$/u);
+    expect(manifest.islands.card?.source).toContain("islands/card.ts");
+  });
 });
 
 function summarizeRoute(route: DiscoveredRoute) {

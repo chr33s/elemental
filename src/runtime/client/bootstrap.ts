@@ -1,6 +1,8 @@
 import type { PublicBuildManifest } from "../../build/manifest.ts";
 import { ELEMENTAL_MANIFEST_PATH } from "../shared/browser-runtime.ts";
 import { matchManifestRoute } from "../shared/routes.ts";
+import { normalizeAssetHref } from "./head.ts";
+import { activateIslands, type IslandModule } from "./islands.ts";
 import {
   getRouteScriptAssets,
   installNavigationInterceptors,
@@ -24,6 +26,7 @@ export interface ElementalBrowserRuntimeApi {
 async function bootstrap(): Promise<void> {
   const state: BootstrapState = {
     currentRoute: undefined,
+    islandControllers: new WeakMap(),
     loadedScriptModules: new Set<string>(),
     manifest: await loadManifest(),
   };
@@ -31,6 +34,7 @@ async function bootstrap(): Promise<void> {
   await primeCurrentRoute(state);
   installNavigationInterceptors(state);
   installBrowserRuntimeApi(state);
+  scheduleIslandActivation(state, document);
   document.documentElement.dataset.elemental = "ready";
 }
 
@@ -56,6 +60,15 @@ async function primeCurrentRoute(state: BootstrapState): Promise<void> {
   }
 
   await loadScriptModules(state, getRouteScriptAssets(state.currentRoute.route));
+}
+
+function scheduleIslandActivation(state: BootstrapState, root: Document | Element): void {
+  activateIslands({
+    controllers: state.islandControllers,
+    manifest: state.manifest.islands,
+    resolver: (modulePath) => import(normalizeAssetHref(modulePath)) as Promise<IslandModule>,
+    root,
+  });
 }
 
 function installBrowserRuntimeApi(state: BootstrapState): void {

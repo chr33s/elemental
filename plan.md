@@ -635,7 +635,53 @@ Acceptance criteria:
 - Scoped styling behavior remains consistent with current target split: server emits inline CSS text and browser uses `CSSStyleSheet` for upgraded behavior.
 - Router navigation and error recovery flows continue to function with DSD-authored custom element hosts.
 - The phase introduces no new server/client manifest divergence and no new dynamic import surfaces beyond current trust boundaries.
-- Deferred activation is documented as an opt-in authoring pattern, while framework-managed island scheduling remains out of scope for this phase.
+- Deferred activation is documented as an opt-in authoring pattern, with framework-managed island scheduling tracked as a follow-on phase.
+
+## Phase 16: Deferred Activation
+
+Deliverables:
+
+- Documented author-level deferred activation pattern for auto-registered custom elements (visibility, idle, interaction, eager).
+- Public `deferActivation(...)` helper or base class to standardize activation lifecycles across route and layout custom elements.
+- Guidance for pairing deferred activation with Declarative Shadow DOM so SSR markup remains visible before client modules execute.
+- Framework-managed island manifest that maps logical island identifiers to per-island browser entry modules and required CSS assets.
+- Server-side island marker emission helper that writes the island identifier, selected activation strategy, and serialized configuration into the SSR output.
+- Client-side island activation scheduler that reads island markers, resolves modules through the island manifest, and triggers activation per strategy.
+- Coverage for activation strategies, idempotent activation, manifest resolution, and interaction with client navigation lifecycles.
+
+Tasks:
+
+- Document `data-activate` attribute conventions for custom elements: `eager` (default), `visible`, `idle`, and `interaction`.
+- Add a public helper or mixin/base class that encapsulates the activation gate, ensures activation runs at most once, and exposes an `activate()` lifecycle hook.
+- Provide canonical examples that combine DSD-rendered host content with deferred activation, demonstrating immediate first paint plus delayed interactivity.
+- Document the recommended pattern for lazy `import()` of heavy client logic from inside `activate()`, including handling import failures without breaking SSR markup.
+- Ensure deferred activation cooperates with client navigation: elements removed before activation must cancel pending observers/idle callbacks; re-inserted elements must re-arm activation.
+- Confirm that author-level deferred activation does not interfere with the existing route script loading model (route JS still loads at navigation time; deferral is internal to the element).
+- Document expected fallback behavior in environments without `IntersectionObserver` or `requestIdleCallback`, defaulting to eager activation.
+- Extend route discovery and the build pipeline to detect island entry modules (for example via an `island.ts` convention or explicit registration API) and emit per-island browser bundles plus their CSS dependencies.
+- Add an island manifest section to the existing `manifest.json` output that maps each island identifier to its browser module URL, CSS asset URLs, and supported activation strategies, while preserving a single manifest pipeline shared with route data.
+- Add a server render helper (for example `island({ id, props, strategy })`) that emits a deterministic `data-elemental-island-*` marker block and an inert `<template data-elemental-island-props>` payload for serialized configuration.
+- Add a small client-side island runtime that scans for island markers on initial load and after each client navigation, resolves modules through the island manifest, and invokes per-island `mount(host, props)` exports under the chosen strategy.
+- Reuse the existing asset deduplication path so islands shared across routes do not produce duplicate `<script>` or `<link>` injections during navigation.
+- Constrain island module resolution to manifest-listed entries to preserve the existing dynamic import trust boundary.
+- Add unit tests for the activation helper covering each strategy, idempotency, cancellation on disconnect, and re-arm on reconnect.
+- Add unit tests for island manifest generation, marker emission, and client-side island module resolution, including rejection of unlisted module identifiers.
+- Add integration tests demonstrating that DSD content remains interactive-free until activation occurs and becomes interactive afterward.
+- Add integration tests for framework-managed islands across full document SSR, partial router payload navigation, and back/forward navigation.
+- Add regression tests confirming that activation strategies do not double-register listeners, duplicate shadow root construction, or double-mount islands when navigating between routes that share the same island.
+
+Acceptance criteria:
+
+- Elemental docs include a complete deferred activation authoring flow that works with the existing custom element auto-registration model.
+- The public activation helper (or base class) is part of the `elemental` API and is usable from any auto-registered custom element.
+- Custom elements can opt into `visible`, `idle`, `interaction`, or `eager` activation at the author level without depending on the framework island runtime.
+- Activation runs exactly once per connected lifetime and is correctly torn down on disconnect.
+- Deferred activation composes cleanly with Declarative Shadow DOM: SSR shadow content is visible immediately, and `activate()` runs only when the chosen strategy fires.
+- The build emits an island manifest entry for every discovered island module, including its browser bundle URL and required CSS assets, derived from the same route graph and manifest pipeline as routes.
+- Server output for routes that use islands contains deterministic island markers and serialized props that the client island runtime can resolve without additional network metadata calls.
+- The client island runtime loads island modules only when their activation strategy fires, mounts them against the SSR-rendered host, and rejects module identifiers that are not present in the island manifest.
+- Full document SSR, partial router payload navigation, and back/forward navigation all activate islands consistently without duplicate mounts or duplicate asset injection.
+- Lazy `import()` inside `activate()` (author-level deferral) and framework-managed island module loading both work without bypassing the existing manifest-driven trust boundary.
 
 ## Cross-Cutting Rules
 
