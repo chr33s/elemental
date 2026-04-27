@@ -175,6 +175,54 @@ Server CSS imports are emitted as raw CSS inside the helper's generated `<style>
 - `layout.css` — emitted as a document stylesheet asset, injected in root-to-leaf layout order.
 - Other imported CSS — resolves to raw CSS text on the server and `CSSStyleSheet` in the browser bundle (enabling `adoptedStyleSheets` for shadow DOM).
 
+## Linting
+
+Elemental ships an `oxlint` plugin that encodes framework conventions which the build cannot enforce on its own. The plugin is loaded by [oxlint.config.ts](oxlint.config.ts) via `jsPlugins: ["./oxlint-elemental-plugin.js"]`, so consumers of this repository pick it up automatically through `npm run lint`.
+
+### Setup
+
+To use the plugin in your own app, copy [oxlint-elemental-plugin.js](oxlint-elemental-plugin.js) to your project and reference it from your `oxlint` config:
+
+```ts
+// oxlint.config.ts
+import { defineConfig } from "oxlint";
+
+export default defineConfig({
+  jsPlugins: ["./oxlint-elemental-plugin.js"],
+  rules: {
+    "elemental/no-browser-globals-at-top-level": "error",
+    "elemental/no-customelements-define": "error",
+    "elemental/no-default-with-loader-action": "error",
+    "elemental/no-htmlelement-in-server-module": "error",
+    "elemental/no-server-import-in-browser": "error",
+    "elemental/no-unsafe-safe-html": "error",
+    "elemental/require-tag-name": "error",
+    "elemental/valid-tag-name": "error",
+  },
+});
+```
+
+Then run:
+
+```bash
+npx oxlint
+```
+
+Rules apply by filename convention (`index.ts`, `index.server.ts`, `layout.ts`, `error.ts`, `error.server.ts`, plus `*.server.*` and `*.client.*`), so they cover any directory in the route tree without extra configuration.
+
+### Rules
+
+| Rule                                        | What it flags                                                                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `elemental/no-unsafe-safe-html`             | Direct `safeHtml()` calls in route-facing modules. Disable inline with `oxlint-disable-next-line` when the trust boundary is reviewed.         |
+| `elemental/no-server-import-in-browser`     | Imports of `*.server.*` modules from `index.ts`, `layout.ts`, `error.ts`, or any `*.client.*` file — these would leak into the browser bundle. |
+| `elemental/no-customelements-define`        | Manual `customElements.define()` in `index.ts` or `layout.ts`. Export the class with `static tagName` and let auto-registration handle it.     |
+| `elemental/require-tag-name`                | Exported `HTMLElement` subclasses in `index.ts`/`layout.ts` that omit `static tagName`. Without it the class cannot be auto-registered.        |
+| `elemental/valid-tag-name`                  | `static tagName` declarations that are not a string literal, or are missing the required hyphen.                                               |
+| `elemental/no-htmlelement-in-server-module` | `HTMLElement` subclasses inside `*.server.ts` files — `HTMLElement` does not exist on the server.                                              |
+| `elemental/no-default-with-loader-action`   | `index.server.ts` files that combine a default `Response` handler with `loader`/`action`. The default handler fully owns the response.         |
+| `elemental/no-browser-globals-at-top-level` | Top-level references to `window`, `document`, `customElements`, `navigator`, etc. in isomorphic route modules. Guard with `typeof X` first.    |
+
 ## API Reference
 
 ### Rendering

@@ -114,6 +114,203 @@ export function renderSnippet(value) {
     expect(result.exitCode).toBe(0);
     expect(result.output).not.toContain("elemental/no-unsafe-safe-html");
   });
+
+  it("flags imports of *.server.* modules from browser-reachable files", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-server-import-"));
+    const routeFile = path.join(appDir, "index.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `import { db } from "./db.server.ts";
+import { html } from "elemental";
+
+export default function index() {
+  return html\`<p>${"${String(db)}"}</p>\`;
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("no-server-import-in-browser");
+  });
+
+  it("flags manual customElements.define() in auto-registered modules", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-define-"));
+    const routeFile = path.join(appDir, "layout.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `import { html } from "elemental";
+
+export class Shell extends HTMLElement {
+  static tagName = "el-shell";
+}
+
+customElements.define("el-other", Shell);
+
+export default function layout() {
+  return html\`<div></div>\`;
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("no-customelements-define");
+  });
+
+  it("flags exported HTMLElement subclasses without static tagName", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-tagname-"));
+    const routeFile = path.join(appDir, "index.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `import { html } from "elemental";
+
+export class Widget extends HTMLElement {
+  connectedCallback() {}
+}
+
+export default function index() {
+  return html\`<el-widget></el-widget>\`;
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("require-tag-name");
+  });
+
+  it("flags tag names without a hyphen", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-valid-tagname-"));
+    const routeFile = path.join(appDir, "index.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `import { html } from "elemental";
+
+export class Widget extends HTMLElement {
+  static tagName = "widget";
+}
+
+export default function index() {
+  return html\`<widget></widget>\`;
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("valid-tag-name");
+  });
+
+  it("flags HTMLElement subclasses inside *.server.ts files", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-server-htmlelement-"));
+    const routeFile = path.join(appDir, "index.server.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `export class Leaked extends HTMLElement {}
+
+export async function loader() {
+  return {};
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("no-htmlelement-in-server-module");
+  });
+
+  it("flags index.server.ts that mixes a default export with loader/action", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-default-loader-"));
+    const routeFile = path.join(appDir, "index.server.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `export async function loader() {
+  return {};
+}
+
+export default async function handler() {
+  return new Response("ok");
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("no-default-with-loader-action");
+  });
+
+  it("flags top-level browser globals in browser-reachable modules", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-top-globals-"));
+    const routeFile = path.join(appDir, "error.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `import { html } from "elemental";
+
+const title = document.title;
+
+export default function errorBoundary() {
+  return html\`<p>${"${title}"}</p>\`;
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(1);
+    expect(result.output).toContain("no-browser-globals-at-top-level");
+  });
+
+  it("allows guarded browser global access via typeof", async () => {
+    const appDir = await mkdtemp(path.join(rootDir, ".tmp-oxlint-typeof-guard-"));
+    const routeFile = path.join(appDir, "index.ts");
+
+    temporaryPaths.add(appDir);
+    await writeFile(
+      routeFile,
+      `import { html } from "elemental";
+
+const isBrowser = typeof window !== "undefined";
+
+export default function index() {
+  return html\`<p>${"${isBrowser ? 'browser' : 'server'}"}</p>\`;
+}
+`,
+      "utf8",
+    );
+
+    const result = await runOxlint(routeFile);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.output).not.toContain("no-browser-globals-at-top-level");
+  });
 });
 
 async function runOxlint(filePath: string): Promise<{
