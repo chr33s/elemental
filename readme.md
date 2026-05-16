@@ -58,14 +58,14 @@ Filesystem routing — any directory containing `index.ts` is a route.
 import { html } from "elemental";
 
 export function head() {
-  return html`<title>Hello</title>`;
+	return html`<title>Hello</title>`;
 }
 
 export default function helloRoute() {
-  return html`<section>
-    <h1>Hello</h1>
-    <p>Elemental route</p>
-  </section>`;
+	return html`<section>
+		<h1>Hello</h1>
+		<p>Elemental route</p>
+	</section>`;
 }
 ```
 
@@ -75,7 +75,7 @@ export default function helloRoute() {
 import type { RouteServerContext } from "elemental";
 
 export async function loader(context: RouteServerContext) {
-  return { slug: context.params.slug };
+	return { slug: context.params.slug };
 }
 ```
 
@@ -87,10 +87,10 @@ export async function loader(context: RouteServerContext) {
 import type { RouteServerContext } from "elemental";
 
 export async function action(context: RouteServerContext) {
-  const form = await context.request.formData();
-  const redirectUrl = new URL("/guestbook", context.url);
-  redirectUrl.searchParams.set("name", String(form.get("name") ?? "Anonymous"));
-  return Response.redirect(redirectUrl, 303);
+	const form = await context.request.formData();
+	const redirectUrl = new URL("/guestbook", context.url);
+	redirectUrl.searchParams.set("name", String(form.get("name") ?? "Anonymous"));
+	return Response.redirect(redirectUrl, 303);
 }
 ```
 
@@ -117,7 +117,7 @@ Unsafe:
 import { html, safeHtml } from "elemental";
 
 export default function route({ data }: { data: { bioHtml: string } }) {
-  return html`<section>${safeHtml(data.bioHtml)}</section>`;
+	return html`<section>${safeHtml(data.bioHtml)}</section>`;
 }
 ```
 
@@ -127,7 +127,7 @@ Safer:
 import { html } from "elemental";
 
 export default function route({ data }: { data: { bio: string } }) {
-  return html`<section>${data.bio}</section>`;
+	return html`<section>${data.bio}</section>`;
 }
 ```
 
@@ -144,27 +144,27 @@ import { declarativeShadowDom, html } from "elemental";
 import sheet from "./card.css";
 
 export default function route() {
-  return html`
-    <user-card>
-      ${declarativeShadowDom({
-        content: html`<article><slot name="title"></slot></article>`,
-        styles: [sheet],
-      })}
-      <span slot="title">Hello</span>
-    </user-card>
-  `;
+	return html`
+		<user-card>
+			${declarativeShadowDom({
+				content: html`<article><slot name="title"></slot></article>`,
+				styles: [sheet],
+			})}
+			<span slot="title">Hello</span>
+		</user-card>
+	`;
 }
 
 export class UserCard extends HTMLElement {
-  static tagName = "user-card";
+	static tagName = "user-card";
 
-  connectedCallback() {
-    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+	connectedCallback() {
+		const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
 
-    if (sheet instanceof CSSStyleSheet) {
-      root.adoptedStyleSheets = [sheet];
-    }
-  }
+		if (sheet instanceof CSSStyleSheet) {
+			root.adoptedStyleSheets = [sheet];
+		}
+	}
 }
 ```
 
@@ -183,25 +183,25 @@ Two cooperating mechanisms ship in the public API:
 import { deferActivation } from "elemental";
 
 export class UserCard extends HTMLElement {
-  static tagName = "user-card";
+	static tagName = "user-card";
 
-  #controller?: ReturnType<typeof deferActivation>;
+	#controller?: ReturnType<typeof deferActivation>;
 
-  connectedCallback() {
-    this.#controller = deferActivation({
-      element: this,
-      strategy: "visible",
-      activate: async () => {
-        const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-        const { mount } = await import("./user-card.client.ts");
-        mount(root, this);
-      },
-    });
-  }
+	connectedCallback() {
+		this.#controller = deferActivation({
+			element: this,
+			strategy: "visible",
+			activate: async () => {
+				const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+				const { mount } = await import("./user-card.client.ts");
+				mount(root, this);
+			},
+		});
+	}
 
-  disconnectedCallback() {
-    this.#controller?.cancel();
-  }
+	disconnectedCallback() {
+		this.#controller?.cancel();
+	}
 }
 ```
 
@@ -230,8 +230,8 @@ Place island modules under `<appDir>/islands/`. Each file becomes one island who
 ```ts
 // src/islands/card.ts
 export function mount(host: HTMLElement, props: unknown) {
-  host.dataset.mountedAt = String(Date.now());
-  host.textContent = JSON.stringify(props);
+	host.dataset.mountedAt = String(Date.now());
+	host.textContent = JSON.stringify(props);
 }
 ```
 
@@ -241,16 +241,16 @@ Render the host with the server `island()` helper:
 import { html, island } from "elemental";
 
 export default function route() {
-  return html`
-    <section>
-      ${island({
-        id: "card",
-        props: { highlighted: true },
-        strategy: "visible",
-        content: html`<article>Server-rendered shell</article>`,
-      })}
-    </section>
-  `;
+	return html`
+		<section>
+			${island({
+				id: "card",
+				props: { highlighted: true },
+				strategy: "visible",
+				content: html`<article>Server-rendered shell</article>`,
+			})}
+		</section>
+	`;
 }
 ```
 
@@ -274,17 +274,17 @@ To use the plugin in your own app, copy [oxlint-elemental-plugin.js](oxlint-elem
 import { defineConfig } from "oxlint";
 
 export default defineConfig({
-  jsPlugins: ["./oxlint-elemental-plugin.js"],
-  rules: {
-    "elemental/no-browser-globals-at-top-level": "error",
-    "elemental/no-customelements-define": "error",
-    "elemental/no-default-with-loader-action": "error",
-    "elemental/no-htmlelement-in-server-module": "error",
-    "elemental/no-server-import-in-browser": "error",
-    "elemental/no-unsafe-safe-html": "error",
-    "elemental/require-tag-name": "error",
-    "elemental/valid-tag-name": "error",
-  },
+	jsPlugins: ["./oxlint-elemental-plugin.js"],
+	rules: {
+		"elemental/no-browser-globals-at-top-level": "error",
+		"elemental/no-customelements-define": "error",
+		"elemental/no-default-with-loader-action": "error",
+		"elemental/no-htmlelement-in-server-module": "error",
+		"elemental/no-server-import-in-browser": "error",
+		"elemental/no-unsafe-safe-html": "error",
+		"elemental/require-tag-name": "error",
+		"elemental/valid-tag-name": "error",
+	},
 });
 ```
 
@@ -330,9 +330,9 @@ Rules apply by filename convention (`index.ts`, `index.server.ts`, `layout.ts`, 
 
 ```ts
 interface RouteProps {
-  params: RouteParams;
-  data: Record<string, unknown>;
-  url: URL;
+	params: RouteParams;
+	data: Record<string, unknown>;
+	url: URL;
 }
 ```
 
@@ -340,9 +340,9 @@ interface RouteProps {
 
 ```ts
 interface RouteServerContext {
-  request: Request;
-  params: RouteParams;
-  url: URL;
+	request: Request;
+	params: RouteParams;
+	url: URL;
 }
 ```
 
@@ -350,10 +350,10 @@ interface RouteServerContext {
 
 ```ts
 interface LayoutProps {
-  outlet: HtmlResult;
-  head: HtmlResult;
-  params: RouteParams;
-  url: URL;
+	outlet: HtmlResult;
+	head: HtmlResult;
+	params: RouteParams;
+	url: URL;
 }
 ```
 
@@ -361,12 +361,12 @@ interface LayoutProps {
 
 ```ts
 interface ErrorProps {
-  error: unknown;
-  params: RouteParams;
-  request: Request;
-  status: number;
-  statusText: string;
-  url: URL;
+	error: unknown;
+	params: RouteParams;
+	request: Request;
+	status: number;
+	statusText: string;
+	url: URL;
 }
 ```
 
@@ -374,11 +374,11 @@ interface ErrorProps {
 
 ```ts
 interface ClientErrorProps {
-  error: unknown;
-  params: RouteParams;
-  status?: number;
-  statusText?: string;
-  url: URL;
+	error: unknown;
+	params: RouteParams;
+	status?: number;
+	statusText?: string;
+	url: URL;
 }
 ```
 
@@ -396,10 +396,10 @@ Named `HTMLElement` exports from `index.ts` or `layout.ts` with `static tagName`
 
 ```ts
 export class MyButton extends HTMLElement {
-  static tagName = "my-button";
-  connectedCallback() {
-    this.innerHTML = "<button>Click me</button>";
-  }
+	static tagName = "my-button";
+	connectedCallback() {
+		this.innerHTML = "<button>Click me</button>";
+	}
 }
 ```
 

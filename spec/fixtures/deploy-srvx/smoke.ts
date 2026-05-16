@@ -4,23 +4,23 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 type BuildManifest = {
-  assets?: {
-    clientEntry?: string;
-  };
+	assets?: {
+		clientEntry?: string;
+	};
 };
 
 type SrvxHandlerModule = {
-  default: {
-    fetch: (request: Request) => Promise<Response>;
-  };
+	default: {
+		fetch: (request: Request) => Promise<Response>;
+	};
 };
 
 const fixtureDir = path.dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(
-  await readFile(path.join(fixtureDir, "dist", "manifest.json"), "utf8"),
+	await readFile(path.join(fixtureDir, "dist", "manifest.json"), "utf8"),
 ) as BuildManifest;
 const srvxModule = (await import(
-  pathToFileURL(path.join(fixtureDir, "dist", "srvx.js")).href
+	pathToFileURL(path.join(fixtureDir, "dist", "srvx.js")).href
 )) as SrvxHandlerModule;
 const routeResponse = await srvxModule.default.fetch(new Request("https://example.com/about"));
 const routeText = await routeResponse.text();
@@ -33,7 +33,7 @@ const clientEntry = manifest.assets?.clientEntry;
 assert.equal(typeof clientEntry, "string");
 
 const assetResponse = await srvxModule.default.fetch(
-  new Request(`https://example.com/${clientEntry}`),
+	new Request(`https://example.com/${clientEntry}`),
 );
 
 assert.equal(assetResponse.status, 200);

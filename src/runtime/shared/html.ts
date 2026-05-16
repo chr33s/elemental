@@ -4,69 +4,69 @@ const SAFE_HTML_BRAND = Symbol.for("elemental.safeHtml");
 const CSS_TEXT_BRAND = Symbol.for("elemental.cssText");
 const ATTRIBUTE_ASSIGNMENT_PATTERN = /[^\s"'<>/=]+(?:\s*=\s*)$/;
 const DIRECT_HTML_RESULT_CONSTRUCTION_ERROR =
-  "HtmlResult cannot be constructed directly. Use html`...` or safeHtml().";
+	"HtmlResult cannot be constructed directly. Use html`...` or safeHtml().";
 
 type RawTextElement = "style";
 
 export type SafeHtmlValue = {
-  readonly value: string;
-  readonly [SAFE_HTML_BRAND]: true;
+	readonly value: string;
+	readonly [SAFE_HTML_BRAND]: true;
 };
 
 export type CssTextValue = {
-  readonly raw: string;
-  readonly [CSS_TEXT_BRAND]: true;
-  toString(): string;
-  valueOf(): string;
+	readonly raw: string;
+	readonly [CSS_TEXT_BRAND]: true;
+	toString(): string;
+	valueOf(): string;
 };
 
 export type DeclarativeShadowDomStyle = CSSStyleSheet | HtmlRenderable;
 
 export interface DeclarativeShadowDomOptions {
-  content: HtmlRenderable;
-  styles?: DeclarativeShadowDomStyle | DeclarativeShadowDomStyle[];
-  mode?: "closed" | "open";
-  delegatesFocus?: boolean;
-  clonable?: boolean;
-  serializable?: boolean;
+	content: HtmlRenderable;
+	styles?: DeclarativeShadowDomStyle | DeclarativeShadowDomStyle[];
+	mode?: "closed" | "open";
+	delegatesFocus?: boolean;
+	clonable?: boolean;
+	serializable?: boolean;
 }
 
 export type HtmlRenderable =
-  | CssTextValue
-  | HtmlResult
-  | SafeHtmlValue
-  | string
-  | number
-  | bigint
-  | boolean
-  | null
-  | undefined
-  | HtmlRenderable[];
+	| CssTextValue
+	| HtmlResult
+	| SafeHtmlValue
+	| string
+	| number
+	| bigint
+	| boolean
+	| null
+	| undefined
+	| HtmlRenderable[];
 
 type QuoteCharacter = '"' | "'";
 
 interface TemplateParserState {
-  inTag: boolean;
-  quote: QuoteCharacter | null;
-  rawTextElement: RawTextElement | null;
-  tagBuffer: string;
+	inTag: boolean;
+	quote: QuoteCharacter | null;
+	rawTextElement: RawTextElement | null;
+	tagBuffer: string;
 }
 
 export class HtmlResult {
-  readonly [HTML_RESULT_BRAND] = true;
-  readonly value: string;
+	readonly [HTML_RESULT_BRAND] = true;
+	readonly value: string;
 
-  constructor(value: string, token?: symbol) {
-    if (token !== HTML_RESULT_TOKEN) {
-      throw new TypeError(DIRECT_HTML_RESULT_CONSTRUCTION_ERROR);
-    }
+	constructor(value: string, token?: symbol) {
+		if (token !== HTML_RESULT_TOKEN) {
+			throw new TypeError(DIRECT_HTML_RESULT_CONSTRUCTION_ERROR);
+		}
 
-    this.value = value;
-  }
+		this.value = value;
+	}
 
-  toString(): string {
-    return this.value;
-  }
+	toString(): string {
+		return this.value;
+	}
 }
 
 /**
@@ -85,33 +85,33 @@ export class HtmlResult {
  * ```
  */
 export function html(strings: TemplateStringsArray, ...values: HtmlRenderable[]): HtmlResult {
-  let output = "";
-  const parserState: TemplateParserState = {
-    inTag: false,
-    quote: null,
-    rawTextElement: null,
-    tagBuffer: "",
-  };
+	let output = "";
+	const parserState: TemplateParserState = {
+		inTag: false,
+		quote: null,
+		rawTextElement: null,
+		tagBuffer: "",
+	};
 
-  for (let index = 0; index < strings.length; index += 1) {
-    const currentString = strings[index] ?? "";
+	for (let index = 0; index < strings.length; index += 1) {
+		const currentString = strings[index] ?? "";
 
-    output += currentString;
-    updateTemplateParserState(parserState, currentString);
+		output += currentString;
+		updateTemplateParserState(parserState, currentString);
 
-    if (index < values.length) {
-      output += renderTemplateValue(values[index], {
-        rawTextElement: parserState.rawTextElement,
-        quoteAttributeValue: shouldQuoteAttributeValue(
-          currentString,
-          strings[index + 1] ?? "",
-          parserState,
-        ),
-      });
-    }
-  }
+		if (index < values.length) {
+			output += renderTemplateValue(values[index], {
+				rawTextElement: parserState.rawTextElement,
+				quoteAttributeValue: shouldQuoteAttributeValue(
+					currentString,
+					strings[index + 1] ?? "",
+					parserState,
+				),
+			});
+		}
+	}
 
-  return createHtmlResult(output);
+	return createHtmlResult(output);
 }
 
 /**
@@ -119,16 +119,16 @@ export function html(strings: TemplateStringsArray, ...values: HtmlRenderable[])
  * This is used internally by the CSS module plugin on the server.
  */
 export function cssText(value: string): CssTextValue {
-  return {
-    [CSS_TEXT_BRAND]: true,
-    raw: value,
-    toString() {
-      return value;
-    },
-    valueOf() {
-      return value;
-    },
-  };
+	return {
+		[CSS_TEXT_BRAND]: true,
+		raw: value,
+		toString() {
+			return value;
+		},
+		valueOf() {
+			return value;
+		},
+	};
 }
 
 /**
@@ -139,25 +139,25 @@ export function cssText(value: string): CssTextValue {
  * with `cssText()` are emitted as raw CSS while plain strings remain escaped.
  */
 export function declarativeShadowDom(options: DeclarativeShadowDomOptions): HtmlResult {
-  const mode = options.mode ?? "open";
-  const attributes = [
-    `shadowrootmode="${mode}"`,
-    options.delegatesFocus ? "shadowrootdelegatesfocus" : undefined,
-    options.clonable ? "shadowrootclonable" : undefined,
-    options.serializable ? "shadowrootserializable" : undefined,
-  ].filter((attribute): attribute is string => attribute !== undefined);
-  const styles = normalizeDeclarativeShadowDomStyles(options.styles)
-    .filter((style): style is HtmlRenderable => !isCssStyleSheetValue(style))
-    .map(
-      (style) =>
-        html`<style>
-          ${style}
-        </style>`,
-    );
+	const mode = options.mode ?? "open";
+	const attributes = [
+		`shadowrootmode="${mode}"`,
+		options.delegatesFocus ? "shadowrootdelegatesfocus" : undefined,
+		options.clonable ? "shadowrootclonable" : undefined,
+		options.serializable ? "shadowrootserializable" : undefined,
+	].filter((attribute): attribute is string => attribute !== undefined);
+	const styles = normalizeDeclarativeShadowDomStyles(options.styles)
+		.filter((style): style is HtmlRenderable => !isCssStyleSheetValue(style))
+		.map(
+			(style) =>
+				html`<style>
+					${style}
+				</style>`,
+		);
 
-  return createHtmlResult(
-    `<template ${attributes.join(" ")}>${renderToString(styles)}${renderToString(options.content)}</template>`,
-  );
+	return createHtmlResult(
+		`<template ${attributes.join(" ")}>${renderToString(styles)}${renderToString(options.content)}</template>`,
+	);
 }
 
 /**
@@ -175,10 +175,10 @@ export function declarativeShadowDom(options: DeclarativeShadowDomOptions): Html
  * ```
  */
 export function safeHtml(value: string): SafeHtmlValue {
-  return {
-    [SAFE_HTML_BRAND]: true,
-    value,
-  };
+	return {
+		[SAFE_HTML_BRAND]: true,
+		value,
+	};
 }
 
 /**
@@ -186,7 +186,7 @@ export function safeHtml(value: string): SafeHtmlValue {
  * This is used internally by the rendering pipeline.
  */
 export function renderToString(value: HtmlRenderable): string {
-  return [...renderRenderableChunks(value)].join("");
+	return [...renderRenderableChunks(value)].join("");
 }
 
 /**
@@ -195,21 +195,21 @@ export function renderToString(value: HtmlRenderable): string {
  * the existing escaping semantics.
  */
 export function renderToReadableStream(value: HtmlRenderable): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
+	const encoder = new TextEncoder();
 
-  return new ReadableStream<Uint8Array>({
-    start(controller) {
-      for (const chunk of renderRenderableChunks(value)) {
-        if (chunk.length === 0) {
-          continue;
-        }
+	return new ReadableStream<Uint8Array>({
+		start(controller) {
+			for (const chunk of renderRenderableChunks(value)) {
+				if (chunk.length === 0) {
+					continue;
+				}
 
-        controller.enqueue(encoder.encode(chunk));
-      }
+				controller.enqueue(encoder.encode(chunk));
+			}
 
-      controller.close();
-    },
-  });
+			controller.close();
+		},
+	});
 }
 
 /**
@@ -220,207 +220,207 @@ export function renderToReadableStream(value: HtmlRenderable): ReadableStream<Ui
  * This is used internally by the `html` tagged template.
  */
 export function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("'", "&#39;");
 }
 
 function createHtmlResult(value: string): HtmlResult {
-  return new HtmlResult(value, HTML_RESULT_TOKEN);
+	return new HtmlResult(value, HTML_RESULT_TOKEN);
 }
 
 function normalizeDeclarativeShadowDomStyles(
-  styles: DeclarativeShadowDomOptions["styles"],
+	styles: DeclarativeShadowDomOptions["styles"],
 ): DeclarativeShadowDomStyle[] {
-  if (styles === undefined) {
-    return [];
-  }
+	if (styles === undefined) {
+		return [];
+	}
 
-  return Array.isArray(styles) ? styles : [styles];
+	return Array.isArray(styles) ? styles : [styles];
 }
 
 function isCssStyleSheetValue(value: DeclarativeShadowDomStyle): value is CSSStyleSheet {
-  return typeof CSSStyleSheet === "function" && value instanceof CSSStyleSheet;
+	return typeof CSSStyleSheet === "function" && value instanceof CSSStyleSheet;
 }
 
 function isHtmlResult(value: HtmlRenderable): value is HtmlResult {
-  return typeof value === "object" && value !== null && HTML_RESULT_BRAND in value;
+	return typeof value === "object" && value !== null && HTML_RESULT_BRAND in value;
 }
 
 function isSafeHtmlValue(value: HtmlRenderable): value is SafeHtmlValue {
-  return typeof value === "object" && value !== null && SAFE_HTML_BRAND in value;
+	return typeof value === "object" && value !== null && SAFE_HTML_BRAND in value;
 }
 
 function isCssTextValue(value: HtmlRenderable): value is CssTextValue {
-  return typeof value === "object" && value !== null && CSS_TEXT_BRAND in value;
+	return typeof value === "object" && value !== null && CSS_TEXT_BRAND in value;
 }
 
 function renderTemplateValue(
-  value: HtmlRenderable,
-  options: {
-    rawTextElement: RawTextElement | null;
-    quoteAttributeValue: boolean;
-  },
+	value: HtmlRenderable,
+	options: {
+		rawTextElement: RawTextElement | null;
+		quoteAttributeValue: boolean;
+	},
 ): string {
-  const renderedValue = renderRenderable(value, {
-    rawTextElement: options.rawTextElement,
-  });
+	const renderedValue = renderRenderable(value, {
+		rawTextElement: options.rawTextElement,
+	});
 
-  if (!options.quoteAttributeValue) {
-    return renderedValue;
-  }
+	if (!options.quoteAttributeValue) {
+		return renderedValue;
+	}
 
-  return `"${renderedValue}"`;
+	return `"${renderedValue}"`;
 }
 
 function renderRenderable(
-  value: HtmlRenderable,
-  context: {
-    rawTextElement?: RawTextElement | null;
-  } = {},
+	value: HtmlRenderable,
+	context: {
+		rawTextElement?: RawTextElement | null;
+	} = {},
 ): string {
-  return [...renderRenderableChunks(value, context)].join("");
+	return [...renderRenderableChunks(value, context)].join("");
 }
 
 function* renderRenderableChunks(
-  value: HtmlRenderable,
-  context: {
-    rawTextElement?: RawTextElement | null;
-  } = {},
+	value: HtmlRenderable,
+	context: {
+		rawTextElement?: RawTextElement | null;
+	} = {},
 ): Generator<string> {
-  if (isHtmlResult(value)) {
-    yield value.value;
-    return;
-  }
+	if (isHtmlResult(value)) {
+		yield value.value;
+		return;
+	}
 
-  if (isSafeHtmlValue(value)) {
-    yield value.value;
-    return;
-  }
+	if (isSafeHtmlValue(value)) {
+		yield value.value;
+		return;
+	}
 
-  if (isCssTextValue(value)) {
-    yield context.rawTextElement === "style" ? value.raw : escapeHtml(value.raw);
-    return;
-  }
+	if (isCssTextValue(value)) {
+		yield context.rawTextElement === "style" ? value.raw : escapeHtml(value.raw);
+		return;
+	}
 
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      yield* renderRenderableChunks(entry, context);
-    }
+	if (Array.isArray(value)) {
+		for (const entry of value) {
+			yield* renderRenderableChunks(entry, context);
+		}
 
-    return;
-  }
+		return;
+	}
 
-  if (value === false || value === null || value === undefined) {
-    return;
-  }
+	if (value === false || value === null || value === undefined) {
+		return;
+	}
 
-  yield escapeHtml(String(value));
+	yield escapeHtml(String(value));
 }
 
 function shouldQuoteAttributeValue(
-  previousString: string,
-  nextString: string,
-  parserState: TemplateParserState,
+	previousString: string,
+	nextString: string,
+	parserState: TemplateParserState,
 ): boolean {
-  if (!parserState.inTag || parserState.quote !== null) {
-    return false;
-  }
+	if (!parserState.inTag || parserState.quote !== null) {
+		return false;
+	}
 
-  if (!ATTRIBUTE_ASSIGNMENT_PATTERN.test(previousString)) {
-    return false;
-  }
+	if (!ATTRIBUTE_ASSIGNMENT_PATTERN.test(previousString)) {
+		return false;
+	}
 
-  if (nextString.length === 0) {
-    return true;
-  }
+	if (nextString.length === 0) {
+		return true;
+	}
 
-  return /^[\s/>]/.test(nextString);
+	return /^[\s/>]/.test(nextString);
 }
 
 function updateTemplateParserState(parserState: TemplateParserState, segment: string): void {
-  let index = 0;
+	let index = 0;
 
-  while (index < segment.length) {
-    if (parserState.rawTextElement !== null && !parserState.inTag) {
-      const closingTagIndex = segment
-        .toLowerCase()
-        .indexOf(`</${parserState.rawTextElement}`, index);
+	while (index < segment.length) {
+		if (parserState.rawTextElement !== null && !parserState.inTag) {
+			const closingTagIndex = segment
+				.toLowerCase()
+				.indexOf(`</${parserState.rawTextElement}`, index);
 
-      if (closingTagIndex === -1) {
-        return;
-      }
+			if (closingTagIndex === -1) {
+				return;
+			}
 
-      index = closingTagIndex;
-    }
+			index = closingTagIndex;
+		}
 
-    const character = segment[index];
+		const character = segment[index];
 
-    if (parserState.quote !== null) {
-      parserState.tagBuffer += character;
+		if (parserState.quote !== null) {
+			parserState.tagBuffer += character;
 
-      if (character === parserState.quote) {
-        parserState.quote = null;
-      }
+			if (character === parserState.quote) {
+				parserState.quote = null;
+			}
 
-      index += 1;
-      continue;
-    }
+			index += 1;
+			continue;
+		}
 
-    if (character === "<") {
-      parserState.inTag = true;
-      parserState.tagBuffer = "<";
-      index += 1;
-      continue;
-    }
+		if (character === "<") {
+			parserState.inTag = true;
+			parserState.tagBuffer = "<";
+			index += 1;
+			continue;
+		}
 
-    if (character === ">") {
-      if (parserState.inTag) {
-        parserState.tagBuffer += character;
-        finalizeParsedTag(parserState);
-      }
+		if (character === ">") {
+			if (parserState.inTag) {
+				parserState.tagBuffer += character;
+				finalizeParsedTag(parserState);
+			}
 
-      parserState.inTag = false;
-      index += 1;
-      continue;
-    }
+			parserState.inTag = false;
+			index += 1;
+			continue;
+		}
 
-    if (!parserState.inTag) {
-      index += 1;
-      continue;
-    }
+		if (!parserState.inTag) {
+			index += 1;
+			continue;
+		}
 
-    if (character === '"' || character === "'") {
-      parserState.quote = character;
-    }
+		if (character === '"' || character === "'") {
+			parserState.quote = character;
+		}
 
-    parserState.tagBuffer += character;
-    index += 1;
-  }
+		parserState.tagBuffer += character;
+		index += 1;
+	}
 }
 
 function finalizeParsedTag(parserState: TemplateParserState): void {
-  const tagMatch = parserState.tagBuffer.match(/^<\s*(\/)?\s*([a-zA-Z][^\s/>]*)/u);
+	const tagMatch = parserState.tagBuffer.match(/^<\s*(\/)?\s*([a-zA-Z][^\s/>]*)/u);
 
-  if (tagMatch === null) {
-    parserState.tagBuffer = "";
-    return;
-  }
+	if (tagMatch === null) {
+		parserState.tagBuffer = "";
+		return;
+	}
 
-  const isClosingTag = tagMatch[1] === "/";
-  const tagName = tagMatch[2].toLowerCase();
-  const isSelfClosingTag = /\/\s*>$/u.test(parserState.tagBuffer);
+	const isClosingTag = tagMatch[1] === "/";
+	const tagName = tagMatch[2].toLowerCase();
+	const isSelfClosingTag = /\/\s*>$/u.test(parserState.tagBuffer);
 
-  if (tagName === "style") {
-    if (isClosingTag) {
-      parserState.rawTextElement = null;
-    } else if (!isSelfClosingTag) {
-      parserState.rawTextElement = "style";
-    }
-  }
+	if (tagName === "style") {
+		if (isClosingTag) {
+			parserState.rawTextElement = null;
+		} else if (!isSelfClosingTag) {
+			parserState.rawTextElement = "style";
+		}
+	}
 
-  parserState.tagBuffer = "";
+	parserState.tagBuffer = "";
 }

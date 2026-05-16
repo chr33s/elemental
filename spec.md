@@ -166,7 +166,7 @@ Single segment example:
 
 ```ts
 {
-  slug: "hello-world";
+	slug: "hello-world";
 }
 ```
 
@@ -174,7 +174,7 @@ Catch-all example:
 
 ```ts
 {
-  parts: ["guides", "install"];
+	parts: ["guides", "install"];
 }
 ```
 
@@ -236,10 +236,10 @@ When Elemental executes the default export from `layout.ts`, it provides:
 
 ```ts
 type LayoutProps = {
-  outlet: HtmlResult;
-  head: HtmlResult;
-  params: Record<string, string | string[]>;
-  url: URL;
+	outlet: HtmlResult;
+	head: HtmlResult;
+	params: Record<string, string | string[]>;
+	url: URL;
 };
 ```
 
@@ -260,19 +260,19 @@ Example:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-  return html`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        ${props.head}
-      </head>
-      <body>
-        ${props.outlet}
-      </body>
-    </html>
-  `;
+	return html`
+		<!doctype html>
+		<html>
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width,initial-scale=1" />
+				${props.head}
+			</head>
+			<body>
+				${props.outlet}
+			</body>
+		</html>
+	`;
 }
 ```
 
@@ -284,12 +284,12 @@ Example:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-  return html`
-    <section class="dashboard-layout">
-      <nav><el-dashboard-nav></el-dashboard-nav></nav>
-      <main>${props.outlet}</main>
-    </section>
-  `;
+	return html`
+		<section class="dashboard-layout">
+			<nav><el-dashboard-nav></el-dashboard-nav></nav>
+			<main>${props.outlet}</main>
+		</section>
+	`;
 }
 ```
 
@@ -330,9 +330,9 @@ When Elemental executes the default export from `index.ts`, it provides:
 
 ```ts
 type RouteProps = {
-  params: Record<string, string | string[]>;
-  data: Record<string, unknown>;
-  url: URL;
+	params: Record<string, string | string[]>;
+	data: Record<string, unknown>;
+	url: URL;
 };
 ```
 
@@ -370,16 +370,16 @@ Example:
 import { html } from "elemental";
 
 export default function route(props: RouteProps) {
-  return html`
-    <el-blog-post slug="${props.params.slug}">
-      <template shadowrootmode="open">
-        <article>
-          <h1>${props.data.title}</h1>
-        </article>
-      </template>
-    </el-blog-post>
-    <el-blog-sidebar></el-blog-sidebar>
-  `;
+	return html`
+		<el-blog-post slug="${props.params.slug}">
+			<template shadowrootmode="open">
+				<article>
+					<h1>${props.data.title}</h1>
+				</article>
+			</template>
+		</el-blog-post>
+		<el-blog-sidebar></el-blog-sidebar>
+	`;
 }
 ```
 
@@ -399,11 +399,11 @@ Example:
 import { html } from "elemental";
 
 export default function route(props: RouteProps) {
-  return html`
-    <ul>
-      ${props.data.values.map((value) => html`<li>${value}</li>`)}
-    </ul>
-  `;
+	return html`
+		<ul>
+			${props.data.values.map((value) => html`<li>${value}</li>`)}
+		</ul>
+	`;
 }
 ```
 
@@ -427,11 +427,11 @@ Example:
 import { html, safeHtml } from "elemental";
 
 export default function route(props: RouteProps) {
-  return html`
-    <h1>${props.data.title}</h1>
-    ${props.data.values.map((value) => html`<li>${value}</li>`)}
-    ${safeHtml(props.data.descriptionHtml)}
-  `;
+	return html`
+		<h1>${props.data.title}</h1>
+		${props.data.values.map((value) => html`<li>${value}</li>`)}
+		${safeHtml(props.data.descriptionHtml)}
+	`;
 }
 ```
 
@@ -446,15 +446,15 @@ import { declarativeShadowDom, html } from "elemental";
 import sheet from "./card.css";
 
 export default function route() {
-  return html`
-    <user-card>
-      ${declarativeShadowDom({
-        content: html`<article><slot name="title"></slot></article>`,
-        styles: [sheet],
-      })}
-      <span slot="title">Hello</span>
-    </user-card>
-  `;
+	return html`
+		<user-card>
+			${declarativeShadowDom({
+				content: html`<article><slot name="title"></slot></article>`,
+				styles: [sheet],
+			})}
+			<span slot="title">Hello</span>
+		</user-card>
+	`;
 }
 ```
 
@@ -476,16 +476,16 @@ Elemental supports two cooperating mechanisms for delaying browser-side work aft
 import { html, island } from "elemental";
 
 export default function route() {
-  return html`
-    <section>
-      ${island({
-        id: "card",
-        props: { highlighted: true },
-        strategy: "visible",
-        content: html`<article slot="static">Server-rendered shell</article>`,
-      })}
-    </section>
-  `;
+	return html`
+		<section>
+			${island({
+				id: "card",
+				props: { highlighted: true },
+				strategy: "visible",
+				content: html`<article slot="static">Server-rendered shell</article>`,
+			})}
+		</section>
+	`;
 }
 ```
 
@@ -507,14 +507,14 @@ The build manifest gains a required `islands` field:
 
 ```ts
 type BuildManifestIsland = {
-  css?: string[];
-  js: string;
-  source: string;
+	css?: string[];
+	js: string;
+	source: string;
 };
 
 type PublicBuildManifestIsland = {
-  css?: string[];
-  js: string;
+	css?: string[];
+	js: string;
 };
 ```
 
@@ -564,33 +564,33 @@ import { html } from "elemental";
 import sheet from "./post.css";
 
 export default function route(props: RouteProps) {
-  return html`
-    <el-blog-post slug="${props.params.slug}"></el-blog-post>
-    <el-blog-sidebar></el-blog-sidebar>
-  `;
+	return html`
+		<el-blog-post slug="${props.params.slug}"></el-blog-post>
+		<el-blog-sidebar></el-blog-sidebar>
+	`;
 }
 
 export class BlogPost extends HTMLElement {
-  static tagName = "el-blog-post";
+	static tagName = "el-blog-post";
 
-  connectedCallback() {
-    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.adoptedStyleSheets = [sheet];
-    // Note: innerHTML is not escaped. Only use with trusted or sanitized content.
-    root.innerHTML = `
+	connectedCallback() {
+		const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+		root.adoptedStyleSheets = [sheet];
+		// Note: innerHTML is not escaped. Only use with trusted or sanitized content.
+		root.innerHTML = `
       <article>
         <h1>${this.getAttribute("slug") ?? ""}</h1>
       </article>
     `;
-  }
+	}
 }
 
 export class BlogSidebar extends HTMLElement {
-  static tagName = "el-blog-sidebar";
+	static tagName = "el-blog-sidebar";
 
-  connectedCallback() {
-    this.innerHTML = `<aside>Sidebar</aside>`;
-  }
+	connectedCallback() {
+		this.innerHTML = `<aside>Sidebar</aside>`;
+	}
 }
 ```
 
@@ -630,18 +630,18 @@ Example:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-  return html`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-      </head>
-      <body>
-        <el-app-shell> ${props.outlet} </el-app-shell>
-      </body>
-    </html>
-  `;
+	return html`
+		<!doctype html>
+		<html>
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width,initial-scale=1" />
+			</head>
+			<body>
+				<el-app-shell> ${props.outlet} </el-app-shell>
+			</body>
+		</html>
+	`;
 }
 ```
 
@@ -662,26 +662,26 @@ Example:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-  return html`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-      </head>
-      <body>
-        <el-app-shell> ${props.outlet} </el-app-shell>
-      </body>
-    </html>
-  `;
+	return html`
+		<!doctype html>
+		<html>
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width,initial-scale=1" />
+			</head>
+			<body>
+				<el-app-shell> ${props.outlet} </el-app-shell>
+			</body>
+		</html>
+	`;
 }
 
 export class AppShell extends HTMLElement {
-  static tagName = "el-app-shell";
+	static tagName = "el-app-shell";
 
-  connectedCallback() {
-    this.setAttribute("ready", "");
-  }
+	connectedCallback() {
+		this.setAttribute("ready", "");
+	}
 }
 ```
 
@@ -701,9 +701,9 @@ When Elemental executes `loader()`, `action()`, or the default export from `inde
 
 ```ts
 type RouteServerContext = {
-  request: Request;
-  params: Record<string, string | string[]>;
-  url: URL;
+	request: Request;
+	params: Record<string, string | string[]>;
+	url: URL;
 };
 ```
 
@@ -738,9 +738,9 @@ If a route defines a default export in `index.server.ts`, `loader()` and `action
 
 ```ts
 export async function loader(ctx: RouteServerContext) {
-  return {
-    slug: ctx.params.slug,
-  };
+	return {
+		slug: ctx.params.slug,
+	};
 }
 ```
 
@@ -750,7 +750,7 @@ In this case, Elemental executes the default export from `index.ts` using the lo
 
 ```ts
 export default async function route(ctx: RouteServerContext) {
-  return new Response("Unauthorized", { status: 401 });
+	return new Response("Unauthorized", { status: 401 });
 }
 ```
 
@@ -817,11 +817,11 @@ Example:
 
 ```ts
 export async function loader({ params }: RouteServerContext) {
-  return {
-    slug: params.slug,
-    title: "Hello World",
-    values: ["a", "b", "c"],
-  };
+	return {
+		slug: params.slug,
+		title: "Hello World",
+		values: ["a", "b", "c"],
+	};
 }
 ```
 
@@ -837,12 +837,12 @@ Example:
 
 ```ts
 export async function action(ctx: RouteServerContext) {
-  const form = await ctx.request.formData();
-  const title = form.get("title");
+	const form = await ctx.request.formData();
+	const title = form.get("title");
 
-  await createPost({ title });
+	await createPost({ title });
 
-  return Response.redirect("/posts", 303);
+	return Response.redirect("/posts", 303);
 }
 ```
 
@@ -876,10 +876,10 @@ Example:
 import sheet from "./post.css";
 
 class BlogPost extends HTMLElement {
-  connectedCallback() {
-    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    root.adoptedStyleSheets = [sheet];
-  }
+	connectedCallback() {
+		const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+		root.adoptedStyleSheets = [sheet];
+	}
 }
 ```
 
@@ -894,8 +894,8 @@ Preferred usage is with Shadow DOM and `adoptedStyleSheets`.
 ```ts
 // src/env.d.ts
 declare module "*.css" {
-  const sheet: CSSStyleSheet | string;
-  export default sheet;
+	const sheet: CSSStyleSheet | string;
+	export default sheet;
 }
 ```
 
@@ -911,10 +911,10 @@ Example:
 
 ```ts
 export function head(props: RouteProps) {
-  return html`
-    <title>${props.data.title} | My App</title>
-    <meta name="description" content="${props.data.description}" />
-  `;
+	return html`
+		<title>${props.data.title} | My App</title>
+		<meta name="description" content="${props.data.description}" />
+	`;
 }
 ```
 
@@ -942,12 +942,12 @@ When Elemental executes the default export from `error.server.ts`, it provides:
 
 ```ts
 type ErrorProps = {
-  error: unknown;
-  status: number;
-  statusText: string;
-  request: Request;
-  params: Record<string, string | string[]>;
-  url: URL;
+	error: unknown;
+	status: number;
+	statusText: string;
+	request: Request;
+	params: Record<string, string | string[]>;
+	url: URL;
 };
 ```
 
@@ -970,12 +970,12 @@ Example:
 import { html } from "elemental";
 
 export default function error(props: ErrorProps) {
-  return html`
-    <main>
-      <h1>${props.status} ${props.statusText}</h1>
-      <p>Please try again.</p>
-    </main>
-  `;
+	return html`
+		<main>
+			<h1>${props.status} ${props.statusText}</h1>
+			<p>Please try again.</p>
+		</main>
+	`;
 }
 ```
 
@@ -989,7 +989,7 @@ Example:
 import { html } from "elemental";
 
 export function head(props: ErrorProps) {
-  return html`<title>${props.status} ${props.statusText}</title>`;
+	return html`<title>${props.status} ${props.statusText}</title>`;
 }
 ```
 
@@ -1027,11 +1027,11 @@ When Elemental executes the default export from `error.ts`, it provides:
 
 ```ts
 type ClientErrorProps = {
-  error: unknown;
-  status?: number;
-  statusText?: string;
-  params: Record<string, string | string[]>;
-  url: URL;
+	error: unknown;
+	status?: number;
+	statusText?: string;
+	params: Record<string, string | string[]>;
+	url: URL;
 };
 ```
 
@@ -1052,12 +1052,12 @@ Example:
 import { html } from "elemental";
 
 export default function error(props: ClientErrorProps) {
-  return html`
-    <main>
-      <h1>Something went wrong</h1>
-      <p>${props.statusText ?? "Please refresh and try again."}</p>
-    </main>
-  `;
+	return html`
+		<main>
+			<h1>Something went wrong</h1>
+			<p>${props.statusText ?? "Please refresh and try again."}</p>
+		</main>
+	`;
 }
 ```
 
@@ -1104,7 +1104,7 @@ Example:
 
 ```ts
 export default async function route(ctx: RouteServerContext) {
-  return new Response("Unauthorized", { status: 401 });
+	return new Response("Unauthorized", { status: 401 });
 }
 ```
 
@@ -1186,19 +1186,19 @@ The outermost layout should mark the content insertion point:
 
 ```ts
 export default function layout(props: LayoutProps) {
-  return html`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        ${props.head}
-      </head>
-      <body>
-        <div data-route-outlet>${props.outlet}</div>
-      </body>
-    </html>
-  `;
+	return html`
+		<!doctype html>
+		<html>
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width,initial-scale=1" />
+				${props.head}
+			</head>
+			<body>
+				<div data-route-outlet>${props.outlet}</div>
+			</body>
+		</html>
+	`;
 }
 ```
 
@@ -1251,39 +1251,39 @@ The manifest describes the discovered app root, client entrypoint, route tree, b
 
 ```ts
 type ManifestRoute = {
-  source: string;
-  serverSource?: string;
-  pattern: string;
-  errorBoundaries: string[];
-  serverErrorBoundaries: string[];
-  layouts: string[];
-  layoutStylesheets: string[];
-  browser: {
-    route: string;
-    layouts: string[];
-    errorBoundaries: string[];
-  };
-  server: {
-    route: string;
-    routeServer?: string;
-    layouts: string[];
-    serverErrorBoundaries: string[];
-  };
-  assets: {
-    css?: string[];
-    js?: string[];
-    layoutCss?: string[];
-    scripts?: string[];
-  };
+	source: string;
+	serverSource?: string;
+	pattern: string;
+	errorBoundaries: string[];
+	serverErrorBoundaries: string[];
+	layouts: string[];
+	layoutStylesheets: string[];
+	browser: {
+		route: string;
+		layouts: string[];
+		errorBoundaries: string[];
+	};
+	server: {
+		route: string;
+		routeServer?: string;
+		layouts: string[];
+		serverErrorBoundaries: string[];
+	};
+	assets: {
+		css?: string[];
+		js?: string[];
+		layoutCss?: string[];
+		scripts?: string[];
+	};
 };
 
 type Manifest = {
-  appDir: string;
-  assets: {
-    clientEntry?: string;
-  };
-  generatedAt: string;
-  routes: ManifestRoute[];
+	appDir: string;
+	assets: {
+		clientEntry?: string;
+	};
+	generatedAt: string;
+	routes: ManifestRoute[];
 };
 ```
 
@@ -1333,29 +1333,29 @@ Where:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-  return html`
-    <!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        ${props.head}
-      </head>
-      <body>
-        <el-app-shell>
-          <div data-route-outlet>${props.outlet}</div>
-        </el-app-shell>
-      </body>
-    </html>
-  `;
+	return html`
+		<!doctype html>
+		<html>
+			<head>
+				<meta charset="utf-8" />
+				<meta name="viewport" content="width=device-width,initial-scale=1" />
+				${props.head}
+			</head>
+			<body>
+				<el-app-shell>
+					<div data-route-outlet>${props.outlet}</div>
+				</el-app-shell>
+			</body>
+		</html>
+	`;
 }
 
 export class AppShell extends HTMLElement {
-  static tagName = "el-app-shell";
+	static tagName = "el-app-shell";
 
-  connectedCallback() {
-    this.setAttribute("ready", "");
-  }
+	connectedCallback() {
+		this.setAttribute("ready", "");
+	}
 }
 ```
 
@@ -1366,44 +1366,44 @@ import { html } from "elemental";
 import sheet from "./post.css";
 
 export function head(props: RouteProps) {
-  return html`<title>${props.data.title} | Blog</title>`;
+	return html`<title>${props.data.title} | Blog</title>`;
 }
 
 export default function route(props: RouteProps) {
-  return html`
-    <el-blog-post slug="${props.params.slug}">
-      <template shadowrootmode="open">
-        <style>
-          ${typeof sheet === "string" ? sheet : ""}
-        </style>
-        <article>
-          <h1>${props.data.title}</h1>
-          <p>Rendered on the server, upgraded on the client.</p>
-        </article>
-      </template>
-    </el-blog-post>
-    <el-blog-sidebar></el-blog-sidebar>
-  `;
+	return html`
+		<el-blog-post slug="${props.params.slug}">
+			<template shadowrootmode="open">
+				<style>
+					${typeof sheet === "string" ? sheet : ""}
+				</style>
+				<article>
+					<h1>${props.data.title}</h1>
+					<p>Rendered on the server, upgraded on the client.</p>
+				</article>
+			</template>
+		</el-blog-post>
+		<el-blog-sidebar></el-blog-sidebar>
+	`;
 }
 
 export class BlogPost extends HTMLElement {
-  static tagName = "el-blog-post";
+	static tagName = "el-blog-post";
 
-  connectedCallback() {
-    // Automatically picks up the Declarative Shadow DOM
-    const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
-    if (sheet instanceof CSSStyleSheet) {
-      root.adoptedStyleSheets = [sheet];
-    }
-  }
+	connectedCallback() {
+		// Automatically picks up the Declarative Shadow DOM
+		const root = this.shadowRoot ?? this.attachShadow({ mode: "open" });
+		if (sheet instanceof CSSStyleSheet) {
+			root.adoptedStyleSheets = [sheet];
+		}
+	}
 }
 
 export class BlogSidebar extends HTMLElement {
-  static tagName = "el-blog-sidebar";
+	static tagName = "el-blog-sidebar";
 
-  connectedCallback() {
-    this.innerHTML = `<aside>Sidebar</aside>`;
-  }
+	connectedCallback() {
+		this.innerHTML = `<aside>Sidebar</aside>`;
+	}
 }
 ```
 
@@ -1411,9 +1411,9 @@ export class BlogSidebar extends HTMLElement {
 
 ```ts
 export async function loader({ params }: RouteServerContext) {
-  return {
-    slug: params.slug,
-    title: "Hello World",
-  };
+	return {
+		slug: params.slug,
+		title: "Hello World",
+	};
 }
 ```

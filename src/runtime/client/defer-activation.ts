@@ -3,10 +3,10 @@ import type { IslandStrategy } from "../shared/islands.ts";
 export type ActivationStrategy = IslandStrategy;
 
 const ACTIVATION_STRATEGIES: readonly ActivationStrategy[] = [
-  "eager",
-  "idle",
-  "interaction",
-  "visible",
+	"eager",
+	"idle",
+	"interaction",
+	"visible",
 ];
 
 /**
@@ -31,39 +31,39 @@ const ACTIVATION_STRATEGIES: readonly ActivationStrategy[] = [
  * ```
  */
 export function readActivationStrategy(
-  element: Element,
-  fallback: ActivationStrategy = "eager",
+	element: Element,
+	fallback: ActivationStrategy = "eager",
 ): ActivationStrategy {
-  const raw = element.getAttribute("data-activate");
+	const raw = element.getAttribute("data-activate");
 
-  if (raw !== null && (ACTIVATION_STRATEGIES as readonly string[]).includes(raw)) {
-    return raw as ActivationStrategy;
-  }
+	if (raw !== null && (ACTIVATION_STRATEGIES as readonly string[]).includes(raw)) {
+		return raw as ActivationStrategy;
+	}
 
-  return fallback;
+	return fallback;
 }
 
 export interface DeferActivationOptions {
-  activate: () => void | Promise<void>;
-  element: Element;
-  events?: string[];
-  intersectionRoot?: Document | Element | null;
-  signal?: AbortSignal;
-  strategy?: ActivationStrategy;
+	activate: () => void | Promise<void>;
+	element: Element;
+	events?: string[];
+	intersectionRoot?: Document | Element | null;
+	signal?: AbortSignal;
+	strategy?: ActivationStrategy;
 }
 
 export interface DeferredActivationController {
-  readonly activated: boolean;
-  cancel(): void;
-  trigger(): Promise<void>;
+	readonly activated: boolean;
+	cancel(): void;
+	trigger(): Promise<void>;
 }
 
 interface RequestIdleCallbackLike {
-  (callback: () => void): number;
+	(callback: () => void): number;
 }
 
 interface CancelIdleCallbackLike {
-  (handle: number): void;
+	(handle: number): void;
 }
 
 const DEFAULT_INTERACTION_EVENTS = ["pointerdown", "focusin", "keydown"];
@@ -79,152 +79,152 @@ const DEFAULT_INTERACTION_EVENTS = ["pointerdown", "focusin", "keydown"];
  * back to eager execution.
  */
 export function deferActivation(options: DeferActivationOptions): DeferredActivationController {
-  const {
-    activate,
-    element,
-    events = DEFAULT_INTERACTION_EVENTS,
-    intersectionRoot,
-    signal,
-    strategy = "eager",
-  } = options;
-  const cleanups = new Set<() => void>();
-  let state: "activated" | "activating" | "canceled" | "pending" = "pending";
+	const {
+		activate,
+		element,
+		events = DEFAULT_INTERACTION_EVENTS,
+		intersectionRoot,
+		signal,
+		strategy = "eager",
+	} = options;
+	const cleanups = new Set<() => void>();
+	let state: "activated" | "activating" | "canceled" | "pending" = "pending";
 
-  const teardown = (): void => {
-    for (const cleanup of cleanups) {
-      cleanup();
-    }
-    cleanups.clear();
-  };
+	const teardown = (): void => {
+		for (const cleanup of cleanups) {
+			cleanup();
+		}
+		cleanups.clear();
+	};
 
-  const cancel = (): void => {
-    if (state === "activated" || state === "canceled") {
-      return;
-    }
+	const cancel = (): void => {
+		if (state === "activated" || state === "canceled") {
+			return;
+		}
 
-    state = "canceled";
-    teardown();
-  };
+		state = "canceled";
+		teardown();
+	};
 
-  const trigger = async (): Promise<void> => {
-    if (state !== "pending") {
-      return;
-    }
+	const trigger = async (): Promise<void> => {
+		if (state !== "pending") {
+			return;
+		}
 
-    state = "activating";
-    teardown();
+		state = "activating";
+		teardown();
 
-    try {
-      await activate();
-      state = "activated";
-    } catch (error) {
-      state = "canceled";
-      throw error;
-    }
-  };
+		try {
+			await activate();
+			state = "activated";
+		} catch (error) {
+			state = "canceled";
+			throw error;
+		}
+	};
 
-  const controller: DeferredActivationController = {
-    cancel,
-    trigger,
-    get activated() {
-      return state === "activated";
-    },
-  };
+	const controller: DeferredActivationController = {
+		cancel,
+		trigger,
+		get activated() {
+			return state === "activated";
+		},
+	};
 
-  if (signal?.aborted) {
-    cancel();
-    return controller;
-  }
+	if (signal?.aborted) {
+		cancel();
+		return controller;
+	}
 
-  if (signal !== undefined) {
-    const onAbort = (): void => {
-      cancel();
-    };
+	if (signal !== undefined) {
+		const onAbort = (): void => {
+			cancel();
+		};
 
-    signal.addEventListener("abort", onAbort);
-    cleanups.add(() => {
-      signal.removeEventListener("abort", onAbort);
-    });
-  }
+		signal.addEventListener("abort", onAbort);
+		cleanups.add(() => {
+			signal.removeEventListener("abort", onAbort);
+		});
+	}
 
-  if (strategy === "eager") {
-    void trigger();
-    return controller;
-  }
+	if (strategy === "eager") {
+		void trigger();
+		return controller;
+	}
 
-  if (strategy === "idle") {
-    const idleApi = (
-      globalThis as typeof globalThis & {
-        cancelIdleCallback?: CancelIdleCallbackLike;
-        requestIdleCallback?: RequestIdleCallbackLike;
-      }
-    ).requestIdleCallback;
+	if (strategy === "idle") {
+		const idleApi = (
+			globalThis as typeof globalThis & {
+				cancelIdleCallback?: CancelIdleCallbackLike;
+				requestIdleCallback?: RequestIdleCallbackLike;
+			}
+		).requestIdleCallback;
 
-    if (typeof idleApi === "function") {
-      const handle = idleApi(() => {
-        void trigger();
-      });
-      const cancelIdleApi = (
-        globalThis as typeof globalThis & {
-          cancelIdleCallback?: CancelIdleCallbackLike;
-        }
-      ).cancelIdleCallback;
+		if (typeof idleApi === "function") {
+			const handle = idleApi(() => {
+				void trigger();
+			});
+			const cancelIdleApi = (
+				globalThis as typeof globalThis & {
+					cancelIdleCallback?: CancelIdleCallbackLike;
+				}
+			).cancelIdleCallback;
 
-      cleanups.add(() => {
-        if (typeof cancelIdleApi === "function") {
-          cancelIdleApi(handle);
-        }
-      });
-      return controller;
-    }
+			cleanups.add(() => {
+				if (typeof cancelIdleApi === "function") {
+					cancelIdleApi(handle);
+				}
+			});
+			return controller;
+		}
 
-    const handle = setTimeout(() => {
-      void trigger();
-    }, 1);
+		const handle = setTimeout(() => {
+			void trigger();
+		}, 1);
 
-    cleanups.add(() => {
-      clearTimeout(handle);
-    });
-    return controller;
-  }
+		cleanups.add(() => {
+			clearTimeout(handle);
+		});
+		return controller;
+	}
 
-  if (strategy === "interaction") {
-    const handler = (): void => {
-      void trigger();
-    };
+	if (strategy === "interaction") {
+		const handler = (): void => {
+			void trigger();
+		};
 
-    for (const eventName of events) {
-      element.addEventListener(eventName, handler, { once: true, passive: true });
-      cleanups.add(() => {
-        element.removeEventListener(eventName, handler);
-      });
-    }
+		for (const eventName of events) {
+			element.addEventListener(eventName, handler, { once: true, passive: true });
+			cleanups.add(() => {
+				element.removeEventListener(eventName, handler);
+			});
+		}
 
-    return controller;
-  }
+		return controller;
+	}
 
-  if (strategy === "visible") {
-    if (typeof IntersectionObserver === "undefined") {
-      void trigger();
-      return controller;
-    }
+	if (strategy === "visible") {
+		if (typeof IntersectionObserver === "undefined") {
+			void trigger();
+			return controller;
+		}
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          void trigger();
-        }
-      },
-      { root: intersectionRoot ?? null },
-    );
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					void trigger();
+				}
+			},
+			{ root: intersectionRoot ?? null },
+		);
 
-    observer.observe(element);
-    cleanups.add(() => {
-      observer.disconnect();
-    });
-    return controller;
-  }
+		observer.observe(element);
+		cleanups.add(() => {
+			observer.disconnect();
+		});
+		return controller;
+	}
 
-  void trigger();
-  return controller;
+	void trigger();
+	return controller;
 }

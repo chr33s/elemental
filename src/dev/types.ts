@@ -1,3 +1,3 @@
 export interface DevSseMessage {
-  type: "css" | "reload" | "route";
+	type: "css" | "reload" | "route";
 }

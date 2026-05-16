@@ -4,91 +4,91 @@ import { matchManifestRoute } from "../shared/routes.ts";
 import { normalizeAssetHref } from "./head.ts";
 import { activateIslands, type IslandModule } from "./islands.ts";
 import {
-  getRouteScriptAssets,
-  installNavigationInterceptors,
-  loadScriptModules,
-  refreshCurrentRoute,
-  syncCurrentRouteStylesheets,
-  type BootstrapState,
+	getRouteScriptAssets,
+	installNavigationInterceptors,
+	loadScriptModules,
+	refreshCurrentRoute,
+	syncCurrentRouteStylesheets,
+	type BootstrapState,
 } from "./navigation.ts";
 export {
-  collectCustomElementDefinitions,
-  isValidCustomElementTagName,
-  registerCustomElementDefinitions,
+	collectCustomElementDefinitions,
+	isValidCustomElementTagName,
+	registerCustomElementDefinitions,
 } from "./register-elements.ts";
 
 export interface ElementalBrowserRuntimeApi {
-  refreshCurrentRoute(): Promise<void>;
-  replaceManifest(manifest: PublicBuildManifest): void;
-  syncCurrentRouteStylesheets(): Promise<void>;
+	refreshCurrentRoute(): Promise<void>;
+	replaceManifest(manifest: PublicBuildManifest): void;
+	syncCurrentRouteStylesheets(): Promise<void>;
 }
 
 async function bootstrap(): Promise<void> {
-  const state: BootstrapState = {
-    currentRoute: undefined,
-    islandControllers: new WeakMap(),
-    loadedScriptModules: new Set<string>(),
-    manifest: await loadManifest(),
-  };
+	const state: BootstrapState = {
+		currentRoute: undefined,
+		islandControllers: new WeakMap(),
+		loadedScriptModules: new Set<string>(),
+		manifest: await loadManifest(),
+	};
 
-  await primeCurrentRoute(state);
-  installNavigationInterceptors(state);
-  installBrowserRuntimeApi(state);
-  scheduleIslandActivation(state, document);
-  document.documentElement.dataset.elemental = "ready";
+	await primeCurrentRoute(state);
+	installNavigationInterceptors(state);
+	installBrowserRuntimeApi(state);
+	scheduleIslandActivation(state, document);
+	document.documentElement.dataset.elemental = "ready";
 }
 
 async function loadManifest(): Promise<PublicBuildManifest> {
-  const response = await fetch(ELEMENTAL_MANIFEST_PATH, {
-    headers: {
-      accept: "application/json",
-    },
-  });
+	const response = await fetch(ELEMENTAL_MANIFEST_PATH, {
+		headers: {
+			accept: "application/json",
+		},
+	});
 
-  if (!response.ok) {
-    throw new Error(`Failed to load Elemental manifest: ${response.status} ${response.statusText}`);
-  }
+	if (!response.ok) {
+		throw new Error(`Failed to load Elemental manifest: ${response.status} ${response.statusText}`);
+	}
 
-  return (await response.json()) as PublicBuildManifest;
+	return (await response.json()) as PublicBuildManifest;
 }
 
 async function primeCurrentRoute(state: BootstrapState): Promise<void> {
-  state.currentRoute = matchManifestRoute(window.location.pathname, state.manifest.routes);
+	state.currentRoute = matchManifestRoute(window.location.pathname, state.manifest.routes);
 
-  if (state.currentRoute === undefined) {
-    return;
-  }
+	if (state.currentRoute === undefined) {
+		return;
+	}
 
-  await loadScriptModules(state, getRouteScriptAssets(state.currentRoute.route));
+	await loadScriptModules(state, getRouteScriptAssets(state.currentRoute.route));
 }
 
 function scheduleIslandActivation(state: BootstrapState, root: Document | Element): void {
-  activateIslands({
-    controllers: state.islandControllers,
-    manifest: state.manifest.islands,
-    resolver: (modulePath) => import(normalizeAssetHref(modulePath)) as Promise<IslandModule>,
-    root,
-  });
+	activateIslands({
+		controllers: state.islandControllers,
+		manifest: state.manifest.islands,
+		resolver: (modulePath) => import(normalizeAssetHref(modulePath)) as Promise<IslandModule>,
+		root,
+	});
 }
 
 function installBrowserRuntimeApi(state: BootstrapState): void {
-  (
-    window as Window & {
-      __elementalBrowserRuntime?: ElementalBrowserRuntimeApi;
-    }
-  ).__elementalBrowserRuntime = {
-    refreshCurrentRoute: () => refreshCurrentRoute(state),
-    replaceManifest: (manifest) => {
-      state.manifest = manifest;
-      state.currentRoute = matchManifestRoute(window.location.pathname, state.manifest.routes);
-    },
-    syncCurrentRouteStylesheets: () => syncCurrentRouteStylesheets(state),
-  };
+	(
+		window as Window & {
+			__elementalBrowserRuntime?: ElementalBrowserRuntimeApi;
+		}
+	).__elementalBrowserRuntime = {
+		refreshCurrentRoute: () => refreshCurrentRoute(state),
+		replaceManifest: (manifest) => {
+			state.manifest = manifest;
+			state.currentRoute = matchManifestRoute(window.location.pathname, state.manifest.routes);
+		},
+		syncCurrentRouteStylesheets: () => syncCurrentRouteStylesheets(state),
+	};
 }
 
 if (typeof window !== "undefined" && typeof document !== "undefined") {
-  void bootstrap().catch((error) => {
-    console.error(error);
-    document.documentElement.dataset.elemental = "error";
-  });
+	void bootstrap().catch((error) => {
+		console.error(error);
+		document.documentElement.dataset.elemental = "error";
+	});
 }

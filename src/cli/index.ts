@@ -11,193 +11,193 @@ import { startDevServer } from "../dev/index.ts";
 const supportedBuildTargets = new Set(["node", "worker"]);
 
 async function main(): Promise<void> {
-  const options = parseArgs({
-    allowPositionals: true,
-    args: process.argv.slice(2),
-    options: {
-      target: { type: "string" },
-      watch: { type: "boolean" },
-      port: { type: "string" },
-    },
-    strict: false,
-  });
+	const options = parseArgs({
+		allowPositionals: true,
+		args: process.argv.slice(2),
+		options: {
+			target: { type: "string" },
+			watch: { type: "boolean" },
+			port: { type: "string" },
+		},
+		strict: false,
+	});
 
-  const currentWorkingDirectory = process.cwd();
-  const packageRoot = await resolvePackageRoot();
-  const [command = "build", appRoot, ...commandArgs] = options.positionals;
-  const buildTarget = normalizeBuildTarget(options.values.target);
+	const currentWorkingDirectory = process.cwd();
+	const packageRoot = await resolvePackageRoot();
+	const [command = "build", appRoot, ...commandArgs] = options.positionals;
+	const buildTarget = normalizeBuildTarget(options.values.target);
 
-  switch (command) {
-    case "build": {
-      const appDir = resolveAppDir(currentWorkingDirectory, packageRoot, appRoot);
+	switch (command) {
+		case "build": {
+			const appDir = resolveAppDir(currentWorkingDirectory, packageRoot, appRoot);
 
-      if (options.values.watch) {
-        await startWatchMode({
-          appDir,
-          command,
-          commandArgs,
-          packageRoot,
-          target: buildTarget,
-        });
+			if (options.values.watch) {
+				await startWatchMode({
+					appDir,
+					command,
+					commandArgs,
+					packageRoot,
+					target: buildTarget,
+				});
 
-        return;
-      }
+				return;
+			}
 
-      const result = await buildProject({
-        appDir,
-        outDir: path.join(currentWorkingDirectory, "dist"),
-        rootDir: packageRoot,
-        target: buildTarget,
-      });
-      const relativeOutDir = path.relative(process.cwd(), result.outDir) || result.outDir;
+			const result = await buildProject({
+				appDir,
+				outDir: path.join(currentWorkingDirectory, "dist"),
+				rootDir: packageRoot,
+				target: buildTarget,
+			});
+			const relativeOutDir = path.relative(process.cwd(), result.outDir) || result.outDir;
 
-      console.log(`Built ${result.routes.length} route(s) into ${relativeOutDir}`);
-      return;
-    }
-    case "dev": {
-      await startDevServer({
-        appDir: resolveAppDir(currentWorkingDirectory, packageRoot, appRoot),
-        outDir: path.join(currentWorkingDirectory, "dist"),
-        port: options.values.port ? Number.parseInt(options.values.port as string) : undefined,
-        rootDir: packageRoot,
-      });
+			console.log(`Built ${result.routes.length} route(s) into ${relativeOutDir}`);
+			return;
+		}
+		case "dev": {
+			await startDevServer({
+				appDir: resolveAppDir(currentWorkingDirectory, packageRoot, appRoot),
+				outDir: path.join(currentWorkingDirectory, "dist"),
+				port: options.values.port ? Number.parseInt(options.values.port as string) : undefined,
+				rootDir: packageRoot,
+			});
 
-      return;
-    }
+			return;
+		}
 
-    default:
-      throw new Error(`Unknown Elemental command: ${command}`) as never;
-  }
+		default:
+			throw new Error(`Unknown Elemental command: ${command}`) as never;
+	}
 }
 
 function resolveAppDir(
-  currentWorkingDirectory: string,
-  packageRoot: string,
-  appArg?: string,
+	currentWorkingDirectory: string,
+	packageRoot: string,
+	appArg?: string,
 ): string {
-  if (appArg !== undefined) {
-    return path.resolve(currentWorkingDirectory, appArg);
-  }
+	if (appArg !== undefined) {
+		return path.resolve(currentWorkingDirectory, appArg);
+	}
 
-  if (path.resolve(currentWorkingDirectory) === path.resolve(packageRoot)) {
-    return path.join(packageRoot, "spec/fixtures/basic-app/src");
-  }
+	if (path.resolve(currentWorkingDirectory) === path.resolve(packageRoot)) {
+		return path.join(packageRoot, "spec/fixtures/basic-app/src");
+	}
 
-  return path.resolve(currentWorkingDirectory, "src");
+	return path.resolve(currentWorkingDirectory, "src");
 }
 
 async function startWatchMode(options: {
-  appDir: string;
-  command: string;
-  commandArgs: string[];
-  packageRoot: string;
-  target?: "node" | "worker";
+	appDir: string;
+	command: string;
+	commandArgs: string[];
+	packageRoot: string;
+	target?: "node" | "worker";
 }): Promise<void> {
-  const scriptPath = fileURLToPath(import.meta.url);
-  const frameworkSrcDir = path.join(options.packageRoot, "src");
-  const watchPaths = await collectWatchPaths([options.appDir, frameworkSrcDir]);
-  const nodeArgs = [
-    ...watchPaths.map((watchPath) => `--watch-path=${watchPath}`),
-    ...(scriptPath.endsWith(".ts") ? ["--experimental-strip-types"] : []),
-    scriptPath,
-    options.command,
-    ...options.commandArgs,
-    ...(options.target === undefined ? [] : ["--target", options.target]),
-  ];
+	const scriptPath = fileURLToPath(import.meta.url);
+	const frameworkSrcDir = path.join(options.packageRoot, "src");
+	const watchPaths = await collectWatchPaths([options.appDir, frameworkSrcDir]);
+	const nodeArgs = [
+		...watchPaths.map((watchPath) => `--watch-path=${watchPath}`),
+		...(scriptPath.endsWith(".ts") ? ["--experimental-strip-types"] : []),
+		scriptPath,
+		options.command,
+		...options.commandArgs,
+		...(options.target === undefined ? [] : ["--target", options.target]),
+	];
 
-  await runWatchProcess(nodeArgs);
+	await runWatchProcess(nodeArgs);
 }
 
 function normalizeBuildTarget(value: unknown): "node" | "worker" | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
+	if (value === undefined) {
+		return undefined;
+	}
 
-  if (typeof value !== "string" || !supportedBuildTargets.has(value)) {
-    throw new Error('Elemental build target must be one of: "node", "worker".');
-  }
+	if (typeof value !== "string" || !supportedBuildTargets.has(value)) {
+		throw new Error('Elemental build target must be one of: "node", "worker".');
+	}
 
-  return value as "node" | "worker";
+	return value as "node" | "worker";
 }
 
 async function collectWatchPaths(candidatePaths: string[]): Promise<string[]> {
-  const uniquePaths = new Set(candidatePaths.map((candidatePath) => path.resolve(candidatePath)));
-  const watchPaths: string[] = [];
+	const uniquePaths = new Set(candidatePaths.map((candidatePath) => path.resolve(candidatePath)));
+	const watchPaths: string[] = [];
 
-  for (const candidatePath of uniquePaths) {
-    try {
-      await access(candidatePath);
-      watchPaths.push(candidatePath);
-    } catch {
-      continue;
-    }
-  }
+	for (const candidatePath of uniquePaths) {
+		try {
+			await access(candidatePath);
+			watchPaths.push(candidatePath);
+		} catch {
+			continue;
+		}
+	}
 
-  return watchPaths;
+	return watchPaths;
 }
 
 async function runWatchProcess(nodeArgs: string[]): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, nodeArgs, {
-      env: process.env,
-      stdio: "inherit",
-    });
-    const forwardSigint = () => {
-      child.kill("SIGINT");
-    };
-    const forwardSigterm = () => {
-      child.kill("SIGTERM");
-    };
+	await new Promise<void>((resolve, reject) => {
+		const child = spawn(process.execPath, nodeArgs, {
+			env: process.env,
+			stdio: "inherit",
+		});
+		const forwardSigint = () => {
+			child.kill("SIGINT");
+		};
+		const forwardSigterm = () => {
+			child.kill("SIGTERM");
+		};
 
-    process.on("SIGINT", forwardSigint);
-    process.on("SIGTERM", forwardSigterm);
+		process.on("SIGINT", forwardSigint);
+		process.on("SIGTERM", forwardSigterm);
 
-    child.once("error", (error) => {
-      cleanup();
-      reject(error);
-    });
-    child.once("exit", (code, signal) => {
-      cleanup();
+		child.once("error", (error) => {
+			cleanup();
+			reject(error);
+		});
+		child.once("exit", (code, signal) => {
+			cleanup();
 
-      if (signal !== null) {
-        process.kill(process.pid, signal);
-        return;
-      }
+			if (signal !== null) {
+				process.kill(process.pid, signal);
+				return;
+			}
 
-      if (code === 0) {
-        resolve();
-        return;
-      }
+			if (code === 0) {
+				resolve();
+				return;
+			}
 
-      reject(new Error(`Elemental watch exited with code ${code ?? 1}.`));
-    });
+			reject(new Error(`Elemental watch exited with code ${code ?? 1}.`));
+		});
 
-    function cleanup() {
-      process.off("SIGINT", forwardSigint);
-      process.off("SIGTERM", forwardSigterm);
-    }
-  });
+		function cleanup() {
+			process.off("SIGINT", forwardSigint);
+			process.off("SIGTERM", forwardSigterm);
+		}
+	});
 }
 
 async function resolvePackageRoot(): Promise<string> {
-  const candidates = [
-    path.resolve(fileURLToPath(new URL("../package.json", import.meta.url))),
-    path.resolve(fileURLToPath(new URL("../../package.json", import.meta.url))),
-  ];
+	const candidates = [
+		path.resolve(fileURLToPath(new URL("../package.json", import.meta.url))),
+		path.resolve(fileURLToPath(new URL("../../package.json", import.meta.url))),
+	];
 
-  for (const packageJsonPath of candidates) {
-    try {
-      await access(packageJsonPath);
-      return path.dirname(packageJsonPath);
-    } catch {
-      continue;
-    }
-  }
+	for (const packageJsonPath of candidates) {
+		try {
+			await access(packageJsonPath);
+			return path.dirname(packageJsonPath);
+		} catch {
+			continue;
+		}
+	}
 
-  throw new Error("Could not resolve the Elemental package root from the CLI entrypoint.");
+	throw new Error("Could not resolve the Elemental package root from the CLI entrypoint.");
 }
 
 void main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
+	console.error(error instanceof Error ? error.message : error);
+	process.exitCode = 1;
 });
