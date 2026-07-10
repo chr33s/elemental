@@ -10,7 +10,17 @@ export function splitPathSegments(pathname: string): string[] {
 	return pathname
 		.split("/")
 		.filter((segment) => segment.length > 0)
-		.map((segment) => decodeURIComponent(segment));
+		.map((segment) => decodePathSegment(segment));
+}
+
+// Malformed percent-encoding (e.g. "/%zz") must not crash route matching;
+// such segments are matched literally and fall through to a 404.
+function decodePathSegment(segment: string): string {
+	try {
+		return decodeURIComponent(segment);
+	} catch {
+		return segment;
+	}
 }
 
 export function normalizePosixPath(value: string): string {

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { BuildManifest } from "../build/manifest.ts";
+import { escapeHtml } from "../runtime/shared/html.ts";
 
 const DEV_CLIENT_SENTINEL = "data-elemental-dev-client";
 
@@ -11,8 +12,7 @@ export function injectDevClientScript(documentMarkup: string, devClientHref: str
 		return documentMarkup;
 	}
 
-	const escapedHref = devClientHref.replaceAll("&", "&amp;").replaceAll('"', "&quot;");
-	const scriptTag = `<script ${DEV_CLIENT_SENTINEL}="true" type="module" src="${escapedHref}"></script>`;
+	const scriptTag = `<script ${DEV_CLIENT_SENTINEL}="true" type="module" src="${escapeHtml(devClientHref)}"></script>`;
 
 	if (documentMarkup.includes("</head>")) {
 		return documentMarkup.replace("</head>", `${scriptTag}</head>`);
@@ -74,6 +74,12 @@ export async function classifyDevUpdate(options: {
 			return "reload";
 		}
 
+		// Router payloads exclude each route's outermost layout, so an edit to
+		// one can only reach the browser through a full reload.
+		if (fileName === "layout.ts" && isOutermostLayout(absolutePath, options.nextManifest)) {
+			return "reload";
+		}
+
 		if (absolutePath.endsWith(".css")) {
 			return "reload";
 		}
@@ -90,6 +96,12 @@ export async function classifyDevUpdate(options: {
 	}
 
 	return sawLayoutCss ? "css" : "route";
+}
+
+function isOutermostLayout(absolutePath: string, manifest: BuildManifest): boolean {
+	return manifest.routes.some(
+		(route) => route.layouts[0] !== undefined && path.resolve(route.layouts[0]) === absolutePath,
+	);
 }
 
 function summarizeManifest(manifest: BuildManifest) {

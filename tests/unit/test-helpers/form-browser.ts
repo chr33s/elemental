@@ -3,9 +3,16 @@ import { vi } from "vitest";
 class FakeHTMLElement {}
 
 export class FakeSubmitter extends FakeHTMLElement {
+	readonly #attributeNames: Set<string>;
+
 	constructor(overrides: Record<string, string> = {}) {
 		super();
 		Object.assign(this, overrides);
+		this.#attributeNames = new Set(Object.keys(overrides).map((name) => name.toLowerCase()));
+	}
+
+	hasAttribute(name: string): boolean {
+		return this.#attributeNames.has(name.toLowerCase());
 	}
 }
 

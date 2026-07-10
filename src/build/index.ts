@@ -58,7 +58,7 @@ export interface BuildResult {
 export async function buildProject(options: BuildOptions = {}): Promise<BuildResult> {
 	const target = options.target;
 	const rootDir = path.resolve(options.rootDir ?? process.cwd());
-	const appDir = path.resolve(rootDir, options.appDir ?? "spec/fixtures/basic-app/src");
+	const appDir = path.resolve(rootDir, options.appDir ?? "src");
 	const outDir = path.resolve(rootDir, options.outDir ?? "dist");
 	const assetsDir = path.join(outDir, "assets");
 	const serverModulesDir = path.join(outDir, "server");

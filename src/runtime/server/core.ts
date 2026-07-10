@@ -1,4 +1,5 @@
 import { createPublicManifest, type BuildManifest } from "../../build/manifest.ts";
+import { ELEMENTAL_MANIFEST_PATH } from "../shared/browser-runtime.ts";
 import { matchManifestRoute } from "../shared/routes.ts";
 import { reportRuntimeError, renderServerErrorResponse } from "./errors.ts";
 import { renderMatchedRoute } from "./routing.ts";
@@ -19,9 +20,13 @@ export interface ElementalRequestHandlerOptions {
 export function createRequestHandler(
 	options: ElementalRequestHandlerOptions,
 ): (request: Request) => Promise<Response> {
-	const publicManifestJson = `${JSON.stringify(createPublicManifest(options.manifest), null, 2)}\n`;
+	const publicManifestJson = createPublicManifestJson(options.manifest);
 
 	return (request) => handleElementalRequestWithRuntime(request, options, publicManifestJson);
+}
+
+export function createPublicManifestJson(manifest: BuildManifest): string {
+	return `${JSON.stringify(createPublicManifest(manifest), null, 2)}\n`;
 }
 
 export async function handleElementalRequestWithRuntime(
@@ -31,9 +36,8 @@ export async function handleElementalRequestWithRuntime(
 ): Promise<Response> {
 	const url = new URL(request.url);
 
-	if (url.pathname === "/manifest.json") {
-		const body =
-			publicManifestJson ?? `${JSON.stringify(createPublicManifest(options.manifest), null, 2)}\n`;
+	if (url.pathname === ELEMENTAL_MANIFEST_PATH) {
+		const body = publicManifestJson ?? createPublicManifestJson(options.manifest);
 
 		return new Response(body, {
 			headers: {

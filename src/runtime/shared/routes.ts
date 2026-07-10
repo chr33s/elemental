@@ -11,6 +11,10 @@ export interface MatchedManifestRoute<TRoute extends ManifestRouteLike = BuildMa
 	route: TRoute;
 }
 
+// Route patterns come from immutable build manifests, so their segment split
+// is computed once instead of on every request/navigation.
+const patternSegmentsCache = new Map<string, string[]>();
+
 export function matchManifestRoute<TRoute extends ManifestRouteLike>(
 	pathname: string,
 	routes: TRoute[],
@@ -35,11 +39,7 @@ export function matchRoutePattern(
 	pattern: string,
 	pathnameSegments: string[],
 ): RouteParams | undefined {
-	if (pattern === "/") {
-		return pathnameSegments.length === 0 ? {} : undefined;
-	}
-
-	const patternSegments = splitPathSegments(pattern);
+	const patternSegments = getPatternSegments(pattern);
 	const params: RouteParams = {};
 	let pathnameIndex = 0;
 
@@ -79,4 +79,15 @@ export function matchRoutePattern(
 	}
 
 	return pathnameIndex === pathnameSegments.length ? params : undefined;
+}
+
+function getPatternSegments(pattern: string): string[] {
+	let segments = patternSegmentsCache.get(pattern);
+
+	if (segments === undefined) {
+		segments = splitPathSegments(pattern);
+		patternSegmentsCache.set(pattern, segments);
+	}
+
+	return segments;
 }

@@ -10,6 +10,7 @@ import {
 	relativePosixPath,
 	splitPathSegments,
 } from "../../shared/path-utils.ts";
+import { parseRouteSegmentSyntax, segmentSpecificity } from "../../shared/route-segments.ts";
 import type { RouteParams } from "./types.ts";
 
 export type ErrorBoundaryKind = "browser" | "server";
@@ -201,20 +202,6 @@ function createServerManifestDirectoryMap(manifest: BuildManifest): Map<string, 
 			}
 		}
 
-		for (let index = 0; index < route.errorBoundaries.length; index += 1) {
-			const sourcePath = route.errorBoundaries[index];
-			const modulePath = route.browser.errorBoundaries[index];
-
-			if (modulePath === undefined) {
-				continue;
-			}
-
-			ensureDirectory(directories, appDir, dirnamePosix(sourcePath)).browserBoundary = {
-				modulePath,
-				sourcePath,
-			};
-		}
-
 		for (let index = 0; index < route.serverErrorBoundaries.length; index += 1) {
 			const sourcePath = route.serverErrorBoundaries[index];
 			const modulePath = route.server.serverErrorBoundaries[index];
@@ -349,16 +336,17 @@ function matchDirectorySegments(
 	let pathnameIndex = 0;
 
 	for (const directorySegment of directorySegments) {
-		if (directorySegment.startsWith("[...") && directorySegment.endsWith("]")) {
-			const paramName = directorySegment.slice(4, -1);
+		const parsedSegment = parseRouteSegmentSyntax(directorySegment);
+
+		if (parsedSegment.kind === "catchall") {
 			const remainingSegments = pathnameSegments.slice(pathnameIndex);
 
 			if (remainingSegments.length === 0) {
 				return undefined;
 			}
 
-			params[paramName] = remainingSegments;
-			specificity.push(1);
+			params[parsedSegment.value] = remainingSegments;
+			specificity.push(segmentSpecificity(parsedSegment.kind));
 
 			return {
 				consumed: pathnameSegments.length,
@@ -373,19 +361,19 @@ function matchDirectorySegments(
 			return undefined;
 		}
 
-		if (directorySegment.startsWith("[") && directorySegment.endsWith("]")) {
-			params[directorySegment.slice(1, -1)] = pathnameSegment;
+		if (parsedSegment.kind === "dynamic") {
+			params[parsedSegment.value] = pathnameSegment;
 			pathnameIndex += 1;
-			specificity.push(2);
+			specificity.push(segmentSpecificity(parsedSegment.kind));
 			continue;
 		}
 
-		if (directorySegment !== pathnameSegment) {
+		if (parsedSegment.value !== pathnameSegment) {
 			return undefined;
 		}
 
 		pathnameIndex += 1;
-		specificity.push(3);
+		specificity.push(segmentSpecificity(parsedSegment.kind));
 	}
 
 	return {

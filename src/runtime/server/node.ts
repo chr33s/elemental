@@ -2,8 +2,11 @@ import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { pathToFileURL } from "node:url";
 import type { BuildManifest } from "../../build/manifest.ts";
+import { ELEMENTAL_SERVER_READY_LOG } from "../../shared/startup.ts";
+import { textResponse } from "../shared/responses.ts";
 import { createRequestHandler, type RouterPayload, type ServerRuntimeAdapter } from "./core.ts";
 
 export interface StartServerOptions {
@@ -17,6 +20,7 @@ export interface StartServerOptions {
 interface NodeRequestSecurityOptions {
 	allowedHosts?: string[];
 	canonicalOrigin?: string;
+	fallbackHost?: string;
 }
 
 export type { RouterPayload };
@@ -30,11 +34,12 @@ export function startServer(options: StartServerOptions): Server {
 		void handleNodeRequest(request, response, handleRequest, {
 			allowedHosts,
 			canonicalOrigin,
+			fallbackHost: `127.0.0.1:${port}`,
 		});
 	});
 
 	server.listen(port, () => {
-		console.log(`Elemental server listening on http://127.0.0.1:${port}`);
+		console.log(`${ELEMENTAL_SERVER_READY_LOG} http://127.0.0.1:${port}`);
 	});
 
 	return server;
@@ -101,6 +106,12 @@ async function handleNodeRequest(
 		}
 
 		console.error(error);
+
+		if (response.headersSent) {
+			response.destroy();
+			return;
+		}
+
 		response.statusCode = 500;
 		response.setHeader("content-type", "text/plain; charset=utf-8");
 		response.end("500 Internal Server Error");
@@ -124,6 +135,8 @@ async function serveAssetFromFileSystem(
 		const fileContents = await readFile(filePath);
 		return new Response(fileContents, {
 			headers: {
+				// Built assets are content-hashed, so clients can cache them forever.
+				"cache-control": "public, max-age=31536000, immutable",
 				"content-type": contentTypeForPath(filePath),
 				"x-content-type-options": "nosniff",
 			},
@@ -153,18 +166,15 @@ function createNodeRequestUrl(request: IncomingMessage, options: NodeRequestSecu
 		throw new InvalidHostHeaderError();
 	}
 
-	const baseOrigin = options.canonicalOrigin ?? `http://${host ?? "127.0.0.1:3000"}`;
+	const baseOrigin =
+		options.canonicalOrigin ?? `http://${host ?? options.fallbackHost ?? "127.0.0.1:3000"}`;
 
 	return new URL(request.url ?? "/", normalizeOrigin(baseOrigin));
 }
 
 function createAssetTextResponse(body: string, status: number): Response {
-	return new Response(body, {
-		headers: {
-			"content-type": "text/plain; charset=utf-8",
-			"x-content-type-options": "nosniff",
-		},
-		status,
+	return textResponse(body, status, {
+		"x-content-type-options": "nosniff",
 	});
 }
 
@@ -315,7 +325,19 @@ async function sendNodeResponse(
 	nodeResponse.statusCode = response.status;
 
 	for (const [name, value] of response.headers) {
+		// Fetch Headers iteration yields each set-cookie entry separately, and
+		// setHeader replaces prior values, so cookies are copied as one array.
+		if (name === "set-cookie") {
+			continue;
+		}
+
 		nodeResponse.setHeader(name, value);
+	}
+
+	const setCookieHeaders = response.headers.getSetCookie();
+
+	if (setCookieHeaders.length > 0) {
+		nodeResponse.setHeader("set-cookie", setCookieHeaders);
 	}
 
 	if (method === "HEAD" || response.body === null) {
@@ -323,7 +345,10 @@ async function sendNodeResponse(
 		return;
 	}
 
-	nodeResponse.end(Buffer.from(await response.arrayBuffer()));
+	await pipeline(
+		Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
+		nodeResponse,
+	);
 }
 
 function contentTypeForPath(filePath: string): string {

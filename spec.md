@@ -1176,6 +1176,10 @@ To minimize wasted CPU and bandwidth during client navigations, the router sends
 
 This avoids generating and parsing a full document shell while preserving correct nested-layout behavior.
 
+Partial payload responses are marked with an `X-Elemental-Router: true` response header (plus `Vary: x-elemental-router` and `Cache-Control: no-store`, since the same URL also serves a full HTML document). The client identifies router payloads by that marker header, so ordinary JSON responses returned by loaders, actions, or `index.server.ts` handlers pass through to the caller untouched.
+
+Because the payload excludes each route's outermost layout, the client compares the current and destination routes' `shell` identity from the public manifest and falls back to a full document navigation when they differ.
+
 If a client-side navigation fails after the payload has been received, the router resolves the nearest applicable `error.ts` and renders it into `data-route-outlet`. If no boundary exists, the router falls back to a full document navigation.
 
 ### Route outlet
@@ -1304,6 +1308,8 @@ Where:
 - `server.layouts` and `server.serverErrorBoundaries` are server bundle paths for matched layouts and server error boundaries,
 - `assets.css` and `assets.layoutCss` list emitted stylesheet asset paths,
 - `assets.js` and `assets.scripts` list emitted browser script asset paths.
+
+The public `manifest.json` served to the browser is a reduced projection of this manifest. In addition to `assets`, `pattern`, and error-boundary fields, each public route carries an optional `shell` value identifying its outermost layout so the client router can detect shell mismatches during client-side navigation.
 
 ---
 

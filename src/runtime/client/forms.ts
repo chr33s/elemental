@@ -64,10 +64,13 @@ function getSubmitter(event: Event): HTMLElement | undefined {
 }
 
 function resolveSubmitUrl(form: HTMLFormElement, submitter?: HTMLElement): URL {
-	const action =
-		readStringProperty(submitter, "formAction") ||
-		readStringProperty(form, "action") ||
-		window.location.href;
+	// The formAction IDL getter returns the document URL whenever the
+	// formaction attribute is absent, so it only wins when the attribute is set.
+	const submitterAction =
+		submitter?.hasAttribute("formaction") === true
+			? readStringProperty(submitter, "formAction")
+			: undefined;
+	const action = submitterAction || readStringProperty(form, "action") || window.location.href;
 
 	return new URL(action, window.location.href);
 }
@@ -93,7 +96,7 @@ function targetsCurrentContext(form: HTMLFormElement, submitter?: HTMLElement): 
 	const target =
 		readStringProperty(submitter, "formTarget") || readStringProperty(form, "target") || "_self";
 
-	return target.length === 0 || target.toLowerCase() === "_self";
+	return target.toLowerCase() === "_self";
 }
 
 function encodeRequestBody(

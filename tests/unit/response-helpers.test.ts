@@ -9,13 +9,20 @@ import {
 
 describe("response helpers", () => {
 	it("creates HTML responses with the expected content type and default status", async () => {
-		const response = htmlResponse("<main>Hello</main>");
+		const response = htmlResponse(safeHtml("<main>Hello</main>"));
 
 		expect(response.status).toBe(200);
 		expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
 		expect(response.headers.get("x-content-type-options")).toBe("nosniff");
 		expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+		expect(response.headers.get("vary")).toBe("x-elemental-router");
 		expect(await response.text()).toBe("<main>Hello</main>");
+	});
+
+	it("escapes plain string bodies like every other renderable", async () => {
+		const response = htmlResponse("<script>alert(1)</script>");
+
+		expect(await response.text()).toBe("&lt;script&gt;alert(1)&lt;/script&gt;");
 	});
 
 	it("streams HTML responses without collapsing the rendered chunks first", async () => {

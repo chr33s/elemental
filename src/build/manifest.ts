@@ -46,6 +46,12 @@ export interface PublicBuildManifestRoute {
 	browser: Pick<BuildManifestRoute["browser"], "errorBoundaries">;
 	errorBoundaries: string[];
 	pattern: string;
+	/**
+	 * Identity of the route's outermost layout. Router payloads only re-render
+	 * inside the shared shell, so the client falls back to a full document
+	 * navigation when two routes disagree on this value.
+	 */
+	shell?: string;
 }
 
 export interface PublicBuildManifestIsland {
@@ -83,6 +89,7 @@ export function createPublicManifest(manifest: BuildManifest): PublicBuildManife
 			},
 			errorBoundaries: [...route.errorBoundaries],
 			pattern: route.pattern,
+			...(route.server.layouts[0] === undefined ? {} : { shell: route.server.layouts[0] }),
 		})),
 	};
 }

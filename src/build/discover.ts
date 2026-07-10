@@ -1,14 +1,16 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import {
+	parseRouteSegmentSyntax,
+	segmentSpecificity,
+	type ParsedRouteSegment,
+} from "../shared/route-segments.ts";
+import { ISLANDS_DIRECTORY_NAME } from "./discover-islands.ts";
 import { validateModuleWithOxc } from "./oxc.ts";
 
-export type RouteSegmentKind = "static" | "dynamic" | "catchall";
+export type { RouteSegmentKind } from "../shared/route-segments.ts";
 
-export interface DiscoveredRouteSegment {
-	kind: RouteSegmentKind;
-	raw: string;
-	value: string;
-}
+export type DiscoveredRouteSegment = ParsedRouteSegment;
 
 export interface DiscoveredRoute {
 	directoryPath: string;
@@ -77,6 +79,8 @@ async function walk(
 
 	const childDirectories = entries
 		.filter((entry) => entry.isDirectory())
+		// <appDir>/islands holds island modules, not routes.
+		.filter((entry) => !(currentDir === rootDir && entry.name === ISLANDS_DIRECTORY_NAME))
 		.sort((left, right) => left.name.localeCompare(right.name));
 
 	for (const entry of childDirectories) {
@@ -175,10 +179,10 @@ function parseRouteSegment(
 		isLast: boolean;
 	},
 ): DiscoveredRouteSegment {
-	if (segment.startsWith("[...") && segment.endsWith("]")) {
-		const value = segment.slice(4, -1);
+	const parsedSegment = parseRouteSegmentSyntax(segment);
 
-		if (value.length === 0) {
+	if (parsedSegment.kind === "catchall") {
+		if (parsedSegment.value.length === 0) {
 			throw new Error(
 				`Route segment ${segment} in ${options.filePath} must name its catch-all parameter`,
 			);
@@ -189,35 +193,15 @@ function parseRouteSegment(
 				`Catch-all route segment ${segment} in ${options.filePath} must be the final segment in the route path`,
 			);
 		}
-
-		return {
-			kind: "catchall",
-			raw: segment,
-			value,
-		};
 	}
 
-	if (segment.startsWith("[") && segment.endsWith("]")) {
-		const value = segment.slice(1, -1);
-
-		if (value.length === 0) {
-			throw new Error(
-				`Route segment ${segment} in ${options.filePath} must name its dynamic parameter`,
-			);
-		}
-
-		return {
-			kind: "dynamic",
-			raw: segment,
-			value,
-		};
+	if (parsedSegment.kind === "dynamic" && parsedSegment.value.length === 0) {
+		throw new Error(
+			`Route segment ${segment} in ${options.filePath} must name its dynamic parameter`,
+		);
 	}
 
-	return {
-		kind: "static",
-		raw: segment,
-		value: segment,
-	};
+	return parsedSegment;
 }
 
 function toRoutePattern(segments: DiscoveredRouteSegment[]): string {
@@ -269,15 +253,4 @@ function compareRoutes(left: DiscoveredRoute, right: DiscoveredRoute): number {
 	}
 
 	return left.pattern.localeCompare(right.pattern);
-}
-
-function segmentSpecificity(kind: RouteSegmentKind): number {
-	switch (kind) {
-		case "static":
-			return 3;
-		case "dynamic":
-			return 2;
-		case "catchall":
-			return 1;
-	}
 }

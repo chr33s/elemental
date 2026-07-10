@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
+import { ELEMENTAL_SERVER_READY_LOG } from "../shared/startup.ts";
 
 export async function startChildProcess(options: {
 	childPort: number;
@@ -20,7 +21,7 @@ export async function startChildProcess(options: {
 
 			process.stdout.write(text);
 
-			if (text.includes("Elemental server listening on")) {
+			if (text.includes(ELEMENTAL_SERVER_READY_LOG)) {
 				cleanup();
 				resolve();
 			}
@@ -60,7 +61,10 @@ export async function startChildProcess(options: {
 }
 
 export async function stopChildProcess(childProcess: ChildProcess): Promise<void> {
-	if (childProcess.killed || childProcess.exitCode !== null) {
+	// signalCode covers children terminated by an external signal (OOM kill,
+	// segfault), whose exitCode stays null; waiting on their already-emitted
+	// "exit" event would hang forever.
+	if (childProcess.killed || childProcess.exitCode !== null || childProcess.signalCode !== null) {
 		return;
 	}
 

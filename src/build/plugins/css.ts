@@ -4,12 +4,40 @@ import type { Plugin } from "esbuild";
 
 export function createCssModulePlugin(target: "browser" | "server"): Plugin {
 	const namespace = `elemental-css-${target}`;
+	// Marker namespace for re-entrant build.resolve calls so bare package
+	// specifiers fall through to esbuild's node_modules resolution.
+	const resolutionNamespace = `${namespace}-resolution`;
 
 	return {
 		name: `elemental-css-${target}`,
 		setup(build) {
-			build.onResolve({ filter: /\.css$/ }, (args) => {
-				const resolvedPath = path.resolve(args.resolveDir, args.path);
+			build.onResolve({ filter: /\.css$/ }, async (args) => {
+				if (args.namespace === resolutionNamespace) {
+					return undefined;
+				}
+
+				let resolvedPath: string;
+
+				if (args.path.startsWith(".") || path.isAbsolute(args.path)) {
+					resolvedPath = path.resolve(args.resolveDir, args.path);
+				} else {
+					const resolution = await build.resolve(args.path, {
+						importer: args.importer,
+						kind: args.kind,
+						namespace: resolutionNamespace,
+						resolveDir: args.resolveDir,
+					});
+
+					if (resolution.errors.length > 0) {
+						return { errors: resolution.errors };
+					}
+
+					if (resolution.external) {
+						return resolution;
+					}
+
+					resolvedPath = resolution.path;
+				}
 
 				if (path.basename(resolvedPath) === "layout.css") {
 					return {

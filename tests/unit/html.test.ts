@@ -60,6 +60,24 @@ describe("html", () => {
 		);
 	});
 
+	it("escapes attribute-breaking characters in partial unquoted attribute values", () => {
+		// Built without a literal html`` template because the formatter would
+		// quote the unquoted attribute this test exists to exercise.
+		const templateStrings = Object.assign(["<div class=btn-", "></div>"], {
+			raw: ["<div class=btn-", "></div>"],
+		}) as unknown as TemplateStringsArray;
+		const result = html(templateStrings, "x onmouseover=alert(1)");
+
+		expect(renderToString(result)).toBe("<div class=btn-x&#32;onmouseover&#61;alert(1)></div>");
+	});
+
+	it("caches template parsing without leaking state across renders", () => {
+		const render = (value: string) => renderToString(html`<p title=${value}>${value}</p>`);
+
+		expect(render("first")).toBe('<p title="first">first</p>');
+		expect(render("<second>")).toBe('<p title="&lt;second&gt;">&lt;second&gt;</p>');
+	});
+
 	it("renders branded CSS text raw inside style tags", () => {
 		const result = html`<style>
 			${cssText(`:host { color: tomato; & > span { display: block; } }`)}

@@ -101,6 +101,9 @@ async function startWatchMode(options: {
 		...(scriptPath.endsWith(".ts") ? ["--experimental-strip-types"] : []),
 		scriptPath,
 		options.command,
+		// The resolved app directory must be forwarded, or every respawned
+		// build falls back to the default app location.
+		options.appDir,
 		...options.commandArgs,
 		...(options.target === undefined ? [] : ["--target", options.target]),
 	];

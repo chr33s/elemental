@@ -28,6 +28,42 @@ describe("renderDocument", () => {
 		expect(document).toContain("<div data-route-outlet><main>&lt;unsafe&gt;</main></div>");
 	});
 
+	it("emits a well-formed shell with the managed head inside a single <head>", () => {
+		const document = compactHtml(
+			renderToString(
+				renderDocument({
+					body: html`<main>Body</main>`,
+					clientAssetHref: "/assets/app.js",
+					stylesheets: ["/assets/route.css"],
+					title: "Structured",
+				}),
+			),
+		);
+		const headStart = document.indexOf("<head>");
+		const headEnd = document.indexOf("</head>");
+		const bodyStart = document.indexOf("<body>");
+		const htmlEnd = document.indexOf("</html>");
+
+		// Exactly one of each structural tag, in document order.
+		for (const tag of ["<head>", "</head>", "<body>", "</body>", "</html>"]) {
+			expect(document.indexOf(tag)).toBe(document.lastIndexOf(tag));
+		}
+
+		expect(headStart).toBeGreaterThan(-1);
+		expect(headEnd).toBeGreaterThan(headStart);
+		expect(bodyStart).toBeGreaterThan(headEnd);
+		expect(htmlEnd).toBeGreaterThan(bodyStart);
+
+		const headContent = document.slice(headStart, headEnd);
+
+		// Title, managed markers, stylesheets, and scripts all belong in <head>.
+		expect(headContent).toContain("<title>Structured</title>");
+		expect(headContent).toContain('<meta name="elemental-head-start"');
+		expect(headContent).toContain('<meta name="elemental-head-end"');
+		expect(headContent).toContain('href="/assets/route.css"');
+		expect(headContent).toContain('src="/assets/app.js"');
+	});
+
 	it("keeps the document shell chunked for streamed responses", () => {
 		const document = renderDocument({
 			body: html`<main>${"streamed"}</main>`,

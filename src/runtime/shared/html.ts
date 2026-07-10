@@ -52,6 +52,22 @@ interface TemplateParserState {
 	tagBuffer: string;
 }
 
+interface TemplateSlotMetadata {
+	escapeUnquotedAttributeValue: boolean;
+	quoteAttributeValue: boolean;
+	rawTextElement: RawTextElement | null;
+}
+
+const DEFAULT_TEMPLATE_SLOT_METADATA: TemplateSlotMetadata = {
+	escapeUnquotedAttributeValue: false,
+	quoteAttributeValue: false,
+	rawTextElement: null,
+};
+
+// Static template strings are identity-stable per call site, so the parser
+// only needs to run once per template rather than on every render.
+const templateSlotMetadataCache = new WeakMap<TemplateStringsArray, TemplateSlotMetadata[]>();
+
 export class HtmlResult {
 	readonly [HTML_RESULT_BRAND] = true;
 	readonly value: string;
@@ -85,33 +101,64 @@ export class HtmlResult {
  * ```
  */
 export function html(strings: TemplateStringsArray, ...values: HtmlRenderable[]): HtmlResult {
+	const slotMetadata = getTemplateSlotMetadata(strings);
 	let output = "";
+
+	for (let index = 0; index < strings.length; index += 1) {
+		output += strings[index] ?? "";
+
+		if (index < values.length) {
+			output += renderTemplateValue(
+				values[index],
+				slotMetadata[index] ?? DEFAULT_TEMPLATE_SLOT_METADATA,
+			);
+		}
+	}
+
+	return createHtmlResult(output);
+}
+
+function getTemplateSlotMetadata(strings: TemplateStringsArray): TemplateSlotMetadata[] {
+	const cached = templateSlotMetadataCache.get(strings);
+
+	if (cached !== undefined) {
+		return cached;
+	}
+
+	const slotMetadata = computeTemplateSlotMetadata(strings);
+
+	templateSlotMetadataCache.set(strings, slotMetadata);
+
+	return slotMetadata;
+}
+
+function computeTemplateSlotMetadata(strings: TemplateStringsArray): TemplateSlotMetadata[] {
 	const parserState: TemplateParserState = {
 		inTag: false,
 		quote: null,
 		rawTextElement: null,
 		tagBuffer: "",
 	};
+	const slotMetadata: TemplateSlotMetadata[] = [];
 
-	for (let index = 0; index < strings.length; index += 1) {
-		const currentString = strings[index] ?? "";
+	for (let index = 0; index < strings.length - 1; index += 1) {
+		updateTemplateParserState(parserState, strings[index] ?? "");
 
-		output += currentString;
-		updateTemplateParserState(parserState, currentString);
+		const quoteAttributeValue = shouldQuoteAttributeValue(
+			strings[index] ?? "",
+			strings[index + 1] ?? "",
+			parserState,
+		);
 
-		if (index < values.length) {
-			output += renderTemplateValue(values[index], {
-				rawTextElement: parserState.rawTextElement,
-				quoteAttributeValue: shouldQuoteAttributeValue(
-					currentString,
-					strings[index + 1] ?? "",
-					parserState,
-				),
-			});
-		}
+		slotMetadata.push({
+			escapeUnquotedAttributeValue:
+				parserState.inTag && parserState.quote === null && !quoteAttributeValue,
+			quoteAttributeValue,
+			rawTextElement: parserState.rawTextElement,
+		});
 	}
 
-	return createHtmlResult(output);
+	return slotMetadata;
 }
 
 /**
@@ -258,22 +305,27 @@ function isCssTextValue(value: HtmlRenderable): value is CssTextValue {
 	return typeof value === "object" && value !== null && CSS_TEXT_BRAND in value;
 }
 
-function renderTemplateValue(
-	value: HtmlRenderable,
-	options: {
-		rawTextElement: RawTextElement | null;
-		quoteAttributeValue: boolean;
-	},
-): string {
+function renderTemplateValue(value: HtmlRenderable, options: TemplateSlotMetadata): string {
 	const renderedValue = renderRenderable(value, {
 		rawTextElement: options.rawTextElement,
 	});
 
-	if (!options.quoteAttributeValue) {
-		return renderedValue;
+	if (options.quoteAttributeValue) {
+		return `"${renderedValue}"`;
 	}
 
-	return `"${renderedValue}"`;
+	if (options.escapeUnquotedAttributeValue && !isHtmlResult(value) && !isSafeHtmlValue(value)) {
+		return escapeUnquotedAttributeValue(renderedValue);
+	}
+
+	return renderedValue;
+}
+
+// An interpolation inside a tag but outside quotes (e.g. html`<div class=btn-${x}>`)
+// cannot be wrapped in quotes after the fact, so characters that would end the
+// attribute value or start a new attribute are emitted as character references.
+function escapeUnquotedAttributeValue(value: string): string {
+	return value.replace(/[\t\n\f\r =`]/gu, (character) => `&#${character.charCodeAt(0)};`);
 }
 
 function renderRenderable(

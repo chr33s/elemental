@@ -63,13 +63,15 @@ export function stripNamedHTMLElementExportsFromServerModule(
 			continue;
 		}
 
-		if (node.type === "ClassDeclaration") {
-			const className = getIdentifierName(node.id);
+		const classDeclaration = getStatementClassDeclaration(node);
+
+		if (classDeclaration !== null) {
+			const className = getIdentifierName(classDeclaration.id);
 
 			if (
 				className !== undefined &&
 				exportedElementNames.has(className) &&
-				extendsHTMLElement(node)
+				extendsHTMLElement(classDeclaration)
 			) {
 				edits.push({
 					end: range[1],
@@ -81,31 +83,7 @@ export function stripNamedHTMLElementExportsFromServerModule(
 			continue;
 		}
 
-		if (node.type !== "ExportNamedDeclaration") {
-			continue;
-		}
-
-		const declaration = asNode(node.declaration);
-
-		if (declaration?.type === "ClassDeclaration") {
-			const className = getIdentifierName(declaration.id);
-
-			if (
-				className !== undefined &&
-				exportedElementNames.has(className) &&
-				extendsHTMLElement(declaration)
-			) {
-				edits.push({
-					end: range[1],
-					start: range[0],
-					text: "",
-				});
-			}
-
-			continue;
-		}
-
-		if (declaration !== null) {
+		if (node.type !== "ExportNamedDeclaration" || asNode(node.declaration) !== null) {
 			continue;
 		}
 
@@ -372,6 +350,20 @@ function renderExportSpecifier(specifier: LooseNode | null): string | undefined 
 	}
 
 	return `${typePrefix}${localName} as ${exportedName}`;
+}
+
+function getStatementClassDeclaration(node: LooseNode): LooseNode | null {
+	if (node.type === "ClassDeclaration") {
+		return node;
+	}
+
+	if (node.type !== "ExportNamedDeclaration") {
+		return null;
+	}
+
+	const declaration = asNode(node.declaration);
+
+	return declaration?.type === "ClassDeclaration" ? declaration : null;
 }
 
 function asNode(value: unknown): LooseNode | null {

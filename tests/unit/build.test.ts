@@ -659,6 +659,7 @@ export const secret = "hidden";
 		expect(packageJson.exports["."].import).toBe("./dist/index.js");
 
 		await buildProject({
+			appDir: path.join("spec", "fixtures", "basic-app", "src"),
 			rootDir: packageDir,
 		});
 		await writeRouteModule(

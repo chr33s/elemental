@@ -82,6 +82,7 @@ describe("client navigation helpers", () => {
 		expect(fetchMock).toHaveBeenCalledWith(new URL("http://example.com/guides"), {
 			cache: "no-store",
 			headers: createRouterRequestHeaders(),
+			signal: expect.any(AbortSignal),
 		});
 		expect(browser.window.location.reloadCalls).toBe(1);
 	});
@@ -121,6 +122,7 @@ describe("client navigation helpers", () => {
 		expect(fetchMock).toHaveBeenCalledWith(new URL("http://example.com/guides"), {
 			cache: "no-store",
 			headers: createRouterRequestHeaders(),
+			signal: expect.any(AbortSignal),
 		});
 		expect(routeOutlet.innerHTML).toBe(
 			'<img src="/x" onerror="alert(1)"><script>alert(1)</script>',
@@ -248,7 +250,9 @@ describe("client navigation helpers", () => {
 		await flushTasks();
 
 		expect(fetchMock).toHaveBeenCalledWith(new URL("http://example.com/about"), {
+			cache: "no-store",
 			headers: createRouterRequestHeaders(),
+			signal: expect.any(AbortSignal),
 		});
 		expect(browser.window.location.reloadCalls).toBe(1);
 	});

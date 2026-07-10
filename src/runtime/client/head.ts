@@ -9,7 +9,7 @@ import {
 export function renderManagedHead(head: string): void {
 	const { end, start } = ensureManagedHeadMarkers();
 
-	for (let node = start.nextSibling; node !== null && node !== end; ) {
+	for (let node = start.nextSibling; node !== null && node !== end;) {
 		const nextSibling = node.nextSibling;
 
 		node.remove();

@@ -40,6 +40,9 @@ export async function startDevServer(options: StartDevServerOptions): Promise<vo
 		serverFile: currentState.serverFile,
 	});
 	let rebuildScheduled = false;
+	// Rebuilds are chained so a watcher event arriving mid-build can never run
+	// a second esbuild pass (and child restart) concurrently with the first.
+	let rebuildQueue: Promise<void> = Promise.resolve();
 	let pendingChangedFiles = new Set<string>();
 	let closed = false;
 
@@ -103,11 +106,15 @@ export async function startDevServer(options: StartDevServerOptions): Promise<vo
 
 		rebuildScheduled = true;
 		setTimeout(() => {
-			void runScheduledRebuild();
+			rebuildQueue = rebuildQueue.then(() => runScheduledRebuild());
 		}, 60);
 	}
 
 	async function runScheduledRebuild(): Promise<void> {
+		if (closed) {
+			return;
+		}
+
 		rebuildScheduled = false;
 		const changedFiles = [...pendingChangedFiles];
 
@@ -142,6 +149,7 @@ export async function startDevServer(options: StartDevServerOptions): Promise<vo
 
 		closed = true;
 		clearInterval(heartbeat);
+		await rebuildQueue.catch(() => {});
 
 		for (const watcher of watchers) {
 			watcher.close();

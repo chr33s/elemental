@@ -4,7 +4,7 @@ import {
 	ELEMENTAL_MANAGED_SCRIPT,
 	ELEMENTAL_MANAGED_STYLESHEET,
 } from "../shared/browser-runtime.ts";
-import { html, renderToString, type HtmlRenderable } from "../shared/html.ts";
+import { html, renderToString, safeHtml, type HtmlRenderable } from "../shared/html.ts";
 
 export interface RenderDocumentOptions {
 	body: HtmlRenderable;
@@ -62,23 +62,24 @@ export function renderDocument(options: RenderDocumentOptions): HtmlRenderable {
 		stylesheets: options.stylesheets,
 	});
 
+	// The document shell is emitted as raw string chunks: the html`` formatter
+	// auto-balances unclosed tags, which would close <head> and <html> before
+	// the title, managed head, and body are appended.
 	return [
-		html`<!doctype html>
-			<html lang="en">
-				<head>
-					<meta charset="utf-8" />
-					<meta name="viewport" content="width=device-width, initial-scale=1" />
-				</head>
-			</html> `,
+		safeHtml(
+			[
+				"<!doctype html>",
+				'<html lang="en">',
+				"<head>",
+				'<meta charset="utf-8" />',
+				'<meta name="viewport" content="width=device-width, initial-scale=1" />',
+				"",
+			].join("\n"),
+		),
 		titleTag,
-		html``,
 		managedHead,
-		html`</head>
-      <body>
-        <div data-route-outlet>`,
+		safeHtml(["</head>", "<body>", "<div data-route-outlet>"].join("\n")),
 		options.body,
-		html`</div>
-      </body>
-    </html>`,
+		safeHtml(["</div>", "</body>", "</html>"].join("\n")),
 	];
 }

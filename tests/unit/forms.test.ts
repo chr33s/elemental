@@ -21,7 +21,7 @@ describe("createFormSubmission", () => {
 
 		const submission = createFormSubmission(form, {
 			submitter,
-		} as SubmitEvent);
+		} as unknown as SubmitEvent);
 
 		expect(FormDataMock.calls).toEqual([[form, submitter]]);
 		expect(submission).toEqual({
@@ -38,7 +38,7 @@ describe("createFormSubmission", () => {
 			method: "post",
 		} as HTMLFormElement;
 
-		const submission = createFormSubmission(form, {} as SubmitEvent);
+		const submission = createFormSubmission(form, {} as unknown as SubmitEvent);
 
 		expect(FormDataMock.calls).toEqual([[form, undefined]]);
 		expect(submission).toEqual({
@@ -59,7 +59,7 @@ describe("createFormSubmission", () => {
 			method: "post",
 		} as HTMLFormElement;
 
-		const submission = createFormSubmission(form, {} as SubmitEvent);
+		const submission = createFormSubmission(form, {} as unknown as SubmitEvent);
 
 		expect(submission).toBeUndefined();
 		expect(FormDataMock.calls).toEqual([]);
@@ -78,7 +78,7 @@ describe("createFormSubmission", () => {
 
 		const submission = createFormSubmission(form, {
 			submitter,
-		} as SubmitEvent);
+		} as unknown as SubmitEvent);
 
 		expect(submission).toEqual({
 			history: "push",
@@ -95,7 +95,7 @@ describe("createFormSubmission", () => {
 			method: "post",
 		} as HTMLFormElement;
 
-		const submission = createFormSubmission(form, {} as SubmitEvent);
+		const submission = createFormSubmission(form, {} as unknown as SubmitEvent);
 
 		expect(submission).toEqual({
 			body: expect.any(FormDataMock),
@@ -117,7 +117,7 @@ describe("createFormSubmission", () => {
 			method: "post",
 		} as HTMLFormElement;
 
-		const submission = createFormSubmission(form, {} as SubmitEvent);
+		const submission = createFormSubmission(form, {} as unknown as SubmitEvent);
 
 		expect(submission).toEqual({
 			body: "title=Hello\r\nattachment=notes.txt",
@@ -138,7 +138,7 @@ describe("createFormSubmission", () => {
 			target: "_blank",
 		} as HTMLFormElement;
 
-		const submission = createFormSubmission(form, {} as SubmitEvent);
+		const submission = createFormSubmission(form, {} as unknown as SubmitEvent);
 
 		expect(submission).toBeUndefined();
 		expect(FormDataMock.calls).toEqual([]);

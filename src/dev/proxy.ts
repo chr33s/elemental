@@ -36,11 +36,21 @@ export async function handleProxyRequest(
 	response.statusCode = proxiedResponse.status;
 
 	for (const [headerName, headerValue] of proxiedResponse.headers) {
-		if (headerName.toLowerCase() === "content-length") {
+		const lowerCaseHeaderName = headerName.toLowerCase();
+
+		// Fetch Headers iteration yields each set-cookie entry separately, and
+		// setHeader replaces prior values, so cookies are copied as one array.
+		if (lowerCaseHeaderName === "content-length" || lowerCaseHeaderName === "set-cookie") {
 			continue;
 		}
 
 		response.setHeader(headerName, headerValue);
+	}
+
+	const setCookieHeaders = proxiedResponse.headers.getSetCookie();
+
+	if (setCookieHeaders.length > 0) {
+		response.setHeader("set-cookie", setCookieHeaders);
 	}
 
 	if ((request.method ?? "GET") === "HEAD" || proxiedResponse.body === null) {
@@ -99,6 +109,10 @@ async function proxyToChild(request: IncomingMessage, childPort: number): Promis
 		duplex: method === "GET" || method === "HEAD" ? undefined : "half",
 		headers,
 		method,
+		// 3xx responses must reach the browser untouched; following them here
+		// breaks the response.redirected/response.url contract the client
+		// router relies on, diverging dev from production.
+		redirect: "manual",
 	} as RequestInit & {
 		duplex?: "half";
 	});

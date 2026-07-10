@@ -70,6 +70,17 @@ export function activateIslands(options: ActivateIslandsOptions): DeferredActiva
 	return created;
 }
 
+interface TrackedIslandHost {
+	controller: DeferredActivationController;
+	controllers: WeakMap<HTMLElement, DeferredActivationController> | undefined;
+	host: HTMLElement;
+}
+
+// One observer per document handles removal for every island host; a
+// per-host observer over the whole subtree would make mutation handling
+// scale with the number of islands on the page.
+const islandRemovalTrackers = new WeakMap<Document, Set<TrackedIslandHost>>();
+
 /**
  * Cancels a pending island controller when its host is removed from the
  * document before activation runs, and re-arming happens automatically
@@ -92,20 +103,36 @@ function observeIslandRemoval(
 		return;
 	}
 
-	const observer = new MutationObserver(() => {
-		if (host.isConnected) {
-			return;
-		}
+	let trackedHosts = islandRemovalTrackers.get(ownerDocument);
 
-		if (!controller.activated) {
-			controller.cancel();
-		}
+	if (trackedHosts === undefined) {
+		const hosts = new Set<TrackedIslandHost>();
+		const observer = new MutationObserver(() => {
+			for (const tracked of hosts) {
+				if (tracked.host.isConnected) {
+					continue;
+				}
 
-		controllers?.delete(host);
-		observer.disconnect();
-	});
+				if (!tracked.controller.activated) {
+					tracked.controller.cancel();
+				}
 
-	observer.observe(target, { childList: true, subtree: true });
+				tracked.controllers?.delete(tracked.host);
+				hosts.delete(tracked);
+			}
+
+			if (hosts.size === 0) {
+				observer.disconnect();
+				islandRemovalTrackers.delete(ownerDocument);
+			}
+		});
+
+		observer.observe(target, { childList: true, subtree: true });
+		islandRemovalTrackers.set(ownerDocument, hosts);
+		trackedHosts = hosts;
+	}
+
+	trackedHosts.add({ controller, controllers, host });
 }
 
 export function readIslandStrategy(host: Element): IslandStrategy {

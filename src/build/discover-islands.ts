@@ -4,7 +4,7 @@ import { ELEMENTAL_ISLAND_ID_PATTERN } from "../runtime/shared/islands.ts";
 import { toPosixPath } from "../shared/path-utils.ts";
 import { validateModuleWithOxc } from "./oxc.ts";
 
-const ISLANDS_DIRECTORY_NAME = "islands";
+export const ISLANDS_DIRECTORY_NAME = "islands";
 
 export interface DiscoveredIsland {
 	filePath: string;

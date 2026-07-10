@@ -1,4 +1,4 @@
-import { html, safeHtml, type HtmlRenderable, type HtmlResult } from "./html.ts";
+import { escapeHtml, html, safeHtml, type HtmlRenderable, type HtmlResult } from "./html.ts";
 
 export const ELEMENTAL_ISLAND_ATTRIBUTE = "data-elemental-island";
 export const ELEMENTAL_ISLAND_STRATEGY_ATTRIBUTE = "data-elemental-island-strategy";
@@ -58,11 +58,11 @@ export function island(options: IslandOptions): HtmlResult {
 		options.props === undefined
 			? null
 			: safeHtml(
-					`<template ${ELEMENTAL_ISLAND_PROPS_ATTRIBUTE}>${escapeTemplateContent(serializeIslandProps(options.props))}</template>`,
+					`<template ${ELEMENTAL_ISLAND_PROPS_ATTRIBUTE}>${escapeHtml(serializeIslandProps(options.props))}</template>`,
 				);
 
 	return html`${safeHtml(
-		`<${tagName} ${ELEMENTAL_ISLAND_ATTRIBUTE}="${escapeAttribute(options.id)}" ${ELEMENTAL_ISLAND_STRATEGY_ATTRIBUTE}="${strategy}">`,
+		`<${tagName} ${ELEMENTAL_ISLAND_ATTRIBUTE}="${escapeHtml(options.id)}" ${ELEMENTAL_ISLAND_STRATEGY_ATTRIBUTE}="${strategy}">`,
 	)}${propsTemplate}${options.content}${safeHtml(`</${tagName}>`)}`;
 }
 
@@ -74,15 +74,13 @@ export function island(options: IslandOptions): HtmlResult {
  * markup. The output remains valid JSON.
  */
 export function serializeIslandProps(value: unknown): string {
-	return JSON.stringify(value).replaceAll("<", "\\u003c");
-}
+	const serialized = JSON.stringify(value);
 
-function escapeAttribute(value: string): string {
-	return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
-}
+	if (typeof serialized !== "string") {
+		throw new TypeError(
+			"Island props must be JSON-serializable; JSON.stringify() returned undefined (functions, symbols, and toJSON() returning undefined are not supported).",
+		);
+	}
 
-function escapeTemplateContent(value: string): string {
-	// Defense in depth: serializeIslandProps already removes "<", so this is a
-	// belt-and-braces guard for any future caller of escapeTemplateContent.
-	return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;");
+	return serialized.replaceAll("<", "\\u003c");
 }

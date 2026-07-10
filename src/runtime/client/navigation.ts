@@ -22,6 +22,13 @@ export interface BootstrapState {
 	islandControllers: WeakMap<HTMLElement, DeferredActivationController>;
 	loadedScriptModules: Set<string>;
 	manifest: PublicBuildManifest;
+	navigationAbortController?: AbortController;
+	navigationGeneration?: number;
+}
+
+interface NavigationAttempt {
+	generation: number;
+	signal: AbortSignal;
 }
 
 interface ElementalNavigationApi extends EventTarget {
@@ -96,7 +103,12 @@ export function installNavigationInterceptors(state: BootstrapState): void {
 		}
 
 		event.preventDefault();
-		void submitFormNavigation(state, submission.url, submission);
+		void submitFormNavigation(state, submission.url, submission).catch((error) => {
+			console.error(error);
+			// The intercepted fetch failed (e.g. offline); retry natively so the
+			// submission is not silently lost.
+			form.submit();
+		});
 	});
 
 	if (navigationApi !== undefined) {
@@ -128,11 +140,17 @@ export function installNavigationInterceptors(state: BootstrapState): void {
 }
 
 export async function refreshCurrentRoute(state: BootstrapState): Promise<void> {
+	const navigation = beginNavigation(state);
 	const currentUrl = new URL(window.location.href);
 	const response = await fetch(currentUrl, {
 		cache: "no-store",
 		headers: createRouterRequestHeaders(),
+		signal: navigation.signal,
 	});
+
+	if (isStaleNavigation(state, navigation.generation)) {
+		return;
+	}
 
 	if (!isRouterPayloadResponse(response)) {
 		fallbackToDocumentNavigation(currentUrl, true);
@@ -145,6 +163,7 @@ export async function refreshCurrentRoute(state: BootstrapState): Promise<void> 
 		response,
 		"none",
 		matchManifestRoute(currentUrl.pathname, state.manifest.routes),
+		navigation.generation,
 	);
 }
 
@@ -203,14 +222,37 @@ async function submitFormNavigation(
 	url: URL,
 	options: FormNavigationSubmission,
 ): Promise<void> {
-	const response = await fetch(url, {
-		body: options.body,
-		headers: createRouterRequestHeaders(options.headers),
-		method: options.method,
-	});
+	const navigation = beginNavigation(state);
+	let response: Response;
+
+	try {
+		response = await fetch(url, {
+			body: options.body,
+			headers: createRouterRequestHeaders(options.headers),
+			method: options.method,
+			signal: navigation.signal,
+		});
+	} catch (error) {
+		if (isStaleNavigation(state, navigation.generation)) {
+			return;
+		}
+
+		throw error;
+	}
+
+	if (isStaleNavigation(state, navigation.generation)) {
+		return;
+	}
 
 	if (isRouterPayloadResponse(response)) {
-		await applyNavigationPayload(state, url, response, options.history);
+		await applyNavigationPayload(
+			state,
+			url,
+			response,
+			options.history,
+			undefined,
+			navigation.generation,
+		);
 		return;
 	}
 
@@ -235,20 +277,38 @@ async function navigate(
 		return;
 	}
 
+	const navigation = beginNavigation(state);
 	const matchedRoute = matchManifestRoute(url.pathname, state.manifest.routes);
 
 	try {
 		const response = await fetch(url, {
+			cache: "no-store",
 			headers: createRouterRequestHeaders(),
+			signal: navigation.signal,
 		});
+
+		if (isStaleNavigation(state, navigation.generation)) {
+			return;
+		}
 
 		if (!isRouterPayloadResponse(response)) {
 			fallbackToDocumentNavigation(url, options.history === "replace");
 			return;
 		}
 
-		await applyNavigationPayload(state, url, response, options.history, matchedRoute);
+		await applyNavigationPayload(
+			state,
+			url,
+			response,
+			options.history,
+			matchedRoute,
+			navigation.generation,
+		);
 	} catch (error) {
+		if (isStaleNavigation(state, navigation.generation)) {
+			return;
+		}
+
 		await recoverFromClientError({
 			error,
 			fallback: () => {
@@ -270,25 +330,56 @@ async function applyNavigationPayload(
 	response: Response,
 	history: NavigationHistoryMode,
 	matchedRoute = matchManifestRoute(requestedUrl.pathname, state.manifest.routes),
+	generation = state.navigationGeneration,
 ): Promise<void> {
-	const payload = (await response.json()) as RouterPayload;
 	const finalUrl = new URL(response.url || requestedUrl.href);
 	const finalRoute = matchManifestRoute(finalUrl.pathname, state.manifest.routes);
+	let payload: RouterPayload | undefined;
 
 	try {
-		const removeObsoleteStylesheets = await syncManagedStylesheets(payload.assets.stylesheets);
-		await loadScriptModules(state, payload.assets.scripts);
+		payload = (await response.json()) as RouterPayload;
+
+		if (isStaleNavigation(state, generation)) {
+			return;
+		}
+
+		// Router payloads only re-render inside the current shell; a route with a
+		// different outermost layout needs a full document render.
+		if (!sharesRouteShell(state.currentRoute, finalRoute ?? matchedRoute)) {
+			fallbackToDocumentNavigation(finalUrl, history === "replace");
+			return;
+		}
+
+		const [removeObsoleteStylesheets] = await Promise.all([
+			syncManagedStylesheets(payload.assets.stylesheets),
+			loadScriptModules(state, payload.assets.scripts),
+		]);
+
+		if (isStaleNavigation(state, generation)) {
+			return;
+		}
+
+		const appliedPayload = payload;
 
 		await performViewTransition(async () => {
-			renderRouteOutlet(payload.outlet);
-			renderManagedHead(payload.head);
+			renderRouteOutlet(appliedPayload.outlet);
+			renderManagedHead(appliedPayload.head);
 		});
 
 		removeObsoleteStylesheets();
 		applyHistory(finalUrl, history);
+
+		if (history === "push" || history === "replace") {
+			resetScrollPosition(finalUrl);
+		}
+
 		state.currentRoute = finalRoute ?? matchedRoute;
 		activateIslandsForState(state, document);
 	} catch (error) {
+		if (isStaleNavigation(state, generation)) {
+			return;
+		}
+
 		if (error instanceof UnsupportedDeclarativeShadowDomNavigationError) {
 			fallbackToDocumentNavigation(finalUrl, history === "replace");
 			return;
@@ -304,10 +395,60 @@ async function applyNavigationPayload(
 			renderHead: renderManagedHead,
 			renderOutlet: renderRouteOutlet,
 			resolver: resolveBrowserModule,
-			status: payload.status,
+			status: payload?.status,
 			statusText: response.statusText,
 			url: finalUrl,
 		});
+	}
+}
+
+function beginNavigation(state: BootstrapState): NavigationAttempt {
+	state.navigationAbortController?.abort();
+
+	const controller = new AbortController();
+
+	state.navigationAbortController = controller;
+	state.navigationGeneration = (state.navigationGeneration ?? 0) + 1;
+
+	return {
+		generation: state.navigationGeneration,
+		signal: controller.signal,
+	};
+}
+
+function isStaleNavigation(state: BootstrapState, generation: number | undefined): boolean {
+	return generation !== undefined && state.navigationGeneration !== generation;
+}
+
+function sharesRouteShell(
+	currentRoute: MatchedManifestRoute<PublicManifestRoute> | undefined,
+	nextRoute: MatchedManifestRoute<PublicManifestRoute> | undefined,
+): boolean {
+	if (currentRoute === undefined || nextRoute === undefined) {
+		return true;
+	}
+
+	return (currentRoute.route.shell ?? null) === (nextRoute.route.shell ?? null);
+}
+
+function resetScrollPosition(url: URL): void {
+	if (url.hash.length > 1) {
+		const target = document.getElementById(decodeFragmentIdentifier(url.hash.slice(1)));
+
+		if (target !== null) {
+			target.scrollIntoView();
+			return;
+		}
+	}
+
+	window.scrollTo(0, 0);
+}
+
+function decodeFragmentIdentifier(fragment: string): string {
+	try {
+		return decodeURIComponent(fragment);
+	} catch {
+		return fragment;
 	}
 }
 
@@ -473,6 +614,18 @@ function shouldInterceptLinkNavigation(
 }
 
 function findNavigableAnchor(event: MouseEvent): HTMLAnchorElement | undefined {
+	// composedPath crosses shadow boundaries, where event.target is retargeted
+	// to the shadow host and closest() would never find the anchor.
+	if (typeof event.composedPath === "function") {
+		for (const entry of event.composedPath()) {
+			if (entry instanceof HTMLAnchorElement && entry.hasAttribute("href")) {
+				return entry;
+			}
+		}
+
+		return undefined;
+	}
+
 	const eventTarget = event.target;
 
 	if (!(eventTarget instanceof Element)) {
