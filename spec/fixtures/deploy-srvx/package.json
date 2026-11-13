@@ -10,7 +10,7 @@
 		"start": "npm run build && srvx serve --entry ./dist/srvx.js --prod"
 	},
 	"devDependencies": {
-		"srvx": "^0.11.15"
+		"srvx": "^1.0.8"
 	},
 	"engines": {
 		"node": ">=24 <25"

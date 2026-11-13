@@ -1,8 +1,8 @@
 import { html } from "elemental";
 
 export function head() {
-	return html`<title>About</title
-		><meta name="description" content="About the Elemental fixture" />`;
+	return html`<title>About</title>
+		<meta name="description" content="About the Elemental fixture" />`;
 }
 
 export class FixtureBadge extends HTMLElement {

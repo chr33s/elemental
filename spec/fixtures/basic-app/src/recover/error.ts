@@ -1,8 +1,8 @@
 import { html, type ClientErrorProps } from "elemental";
 
 export function head(props: ClientErrorProps) {
-	return html`<title>Recovered</title
-		><meta name="recovery-status" content=${String(props.status ?? 500)} />`;
+	return html`<title>Recovered</title>
+		<meta name="recovery-status" content=${String(props.status ?? 500)} />`;
 }
 
 export default function recoverBoundary(props: ClientErrorProps) {

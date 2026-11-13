@@ -28,9 +28,11 @@ export default function guestbook(props: RouteProps) {
 				</label>
 				<button type="submit">Send</button>
 			</form>
-			${hasSubmission
-				? html`<p class="notice" id="guestbook-status">Saved a note for ${name}: ${message}</p>`
-				: html`<p class="notice" id="guestbook-status">No note submitted yet.</p>`}
+			${
+				hasSubmission
+					? html`<p class="notice" id="guestbook-status">Saved a note for ${name}: ${message}</p>`
+					: html`<p class="notice" id="guestbook-status">No note submitted yet.</p>`
+			}
 		</section>
 	`;
 }
