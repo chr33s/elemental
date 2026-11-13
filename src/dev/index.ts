@@ -31,12 +31,14 @@ export async function startDevServer(options: StartDevServerOptions): Promise<vo
 	const outDir = path.resolve(options.outDir);
 	const rootDir = path.resolve(options.rootDir);
 	const port = options.port ?? Number(process.env.PORT ?? 3000);
+	const publicOrigin = `http://127.0.0.1:${port}`;
 	const childPort = await findAvailablePort();
 	const sseClients = new Set<ServerResponse>();
 	const watchedPaths = [appDir, path.join(rootDir, "src")];
 	let currentState = await buildArtifacts({ appDir, childPort, outDir, rootDir });
 	let childProcess = await startChildProcess({
 		childPort,
+		publicOrigin,
 		serverFile: currentState.serverFile,
 	});
 	let rebuildScheduled = false;
@@ -132,6 +134,7 @@ export async function startDevServer(options: StartDevServerOptions): Promise<vo
 			await stopChildProcess(childProcess);
 			childProcess = await startChildProcess({
 				childPort,
+				publicOrigin,
 				serverFile: nextState.serverFile,
 			});
 			currentState = nextState;

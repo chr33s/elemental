@@ -273,7 +273,7 @@ test("recovers client-side navigation through the nearest browser boundary", asy
 	await expect(page).toHaveTitle("Recovered");
 	await expect(page.locator('meta[name="recovery-status"]')).toHaveAttribute("content", "200");
 
-	await expectShellPreserved(page);
+	await expectShellPreserved(page, { layout: false });
 });
 
 test("escapes intercepted reload fallbacks with a document navigation", async ({ page }) => {

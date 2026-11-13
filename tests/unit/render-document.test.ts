@@ -63,19 +63,6 @@ describe("renderDocument", () => {
 		expect(headContent).toContain('href="/assets/route.css"');
 		expect(headContent).toContain('src="/assets/app.js"');
 	});
-
-	it("keeps the document shell chunked for streamed responses", () => {
-		const document = renderDocument({
-			body: html`<main>${"streamed"}</main>`,
-			head: html`<title>Chunked</title>`,
-		});
-		const chunks = [...documentChunks(document)];
-
-		expect(chunks.length).toBeGreaterThan(3);
-		expect(chunks[0]).toContain("<!doctype html>");
-		expect(chunks.some((chunk) => chunk.includes("<div data-route-outlet>"))).toBe(true);
-		expect(chunks.some((chunk) => chunk.includes("<main>streamed</main>"))).toBe(true);
-	});
 });
 
 describe("renderSubtree", () => {
@@ -90,18 +77,4 @@ describe("renderSubtree", () => {
 
 function compactHtml(value: string): string {
 	return value.replaceAll(/\s+/g, " ").trim();
-}
-
-function* documentChunks(value: unknown): Generator<string> {
-	if (Array.isArray(value)) {
-		for (const entry of value) {
-			yield* documentChunks(entry);
-		}
-
-		return;
-	}
-
-	if (value && typeof value === "object" && "value" in value && typeof value.value === "string") {
-		yield value.value;
-	}
 }

@@ -36,83 +36,61 @@ export async function validateModuleWithOxc(filePath: string): Promise<void> {
 	);
 }
 
+// Empty stubs keep the server module evaluable when a route references an
+// element class. Server code must not call element methods; the real class
+// bodies stay in the browser bundle.
 export function stripNamedHTMLElementExportsFromServerModule(
 	filePath: string,
 	sourceText: string,
 ): string {
 	const result = parseModuleWithOxc(filePath, sourceText);
-	const exportedElementNames = new Set(
-		collectExportedHTMLElementClasses(result.program, result.module as ModuleRecord).map(
-			(exportedClass) => exportedClass.name,
-		),
-	);
+	const classes = collectClassNodes(result.program);
+	const stubbedNames = new Set<string>();
+	const stubbed = new Set<ClassStubTarget>();
+	let changed = true;
 
-	if (exportedElementNames.size === 0) {
-		return sourceText;
-	}
+	while (changed) {
+		changed = false;
 
-	const programNode = asNode(result.program);
-	const body = Array.isArray(programNode?.body) ? programNode.body : [];
-	const edits: Array<{ end: number; start: number; text: string }> = [];
-
-	for (const statement of body) {
-		const node = asNode(statement);
-		const range = getNodeRange(node);
-
-		if (node === null || range === undefined) {
-			continue;
-		}
-
-		const classDeclaration = getStatementClassDeclaration(node);
-
-		if (classDeclaration !== null) {
-			const className = getIdentifierName(classDeclaration.id);
-
-			if (
-				className !== undefined &&
-				exportedElementNames.has(className) &&
-				extendsHTMLElement(classDeclaration)
-			) {
-				edits.push({
-					end: range[1],
-					start: range[0],
-					text: "",
-				});
+		for (const classNode of classes) {
+			if (stubbed.has(classNode)) {
+				continue;
 			}
 
-			continue;
+			const superName = classNode.superName;
+			const shouldStub =
+				superName === "HTMLElement" || (superName !== undefined && stubbedNames.has(superName));
+
+			if (!shouldStub) {
+				continue;
+			}
+
+			stubbed.add(classNode);
+
+			if (classNode.bindingName !== undefined) {
+				stubbedNames.add(classNode.bindingName);
+			}
+
+			changed = true;
 		}
-
-		if (node.type !== "ExportNamedDeclaration" || asNode(node.declaration) !== null) {
-			continue;
-		}
-
-		const specifiers = Array.isArray(node.specifiers) ? node.specifiers : [];
-		const keptSpecifiers = specifiers.filter((specifier) => {
-			const localName = getIdentifierName(asNode(specifier)?.local);
-
-			return localName === undefined || !exportedElementNames.has(localName);
-		});
-
-		if (keptSpecifiers.length === specifiers.length) {
-			continue;
-		}
-
-		if (keptSpecifiers.length === 0) {
-			edits.push({
-				end: range[1],
-				start: range[0],
-				text: "",
-			});
-			continue;
-		}
-
-		edits.push({
-			end: range[1],
-			start: range[0],
-			text: buildExportDeclarationReplacement(node, keptSpecifiers),
-		});
 	}
+
+	const edits = [...stubbed]
+		.filter(
+			(candidate) =>
+				![...stubbed].some(
+					(other) =>
+						other !== candidate &&
+						other.range[0] <= candidate.range[0] &&
+						other.range[1] >= candidate.range[1] &&
+						(other.range[0] !== candidate.range[0] || other.range[1] !== candidate.range[1]),
+				),
+		)
+		.map((classNode) => ({
+			end: classNode.range[1],
+			start: classNode.range[0],
+			text: classNode.bindingName === undefined ? "class {}" : `class ${classNode.bindingName} {}`,
+		}));
 
 	if (edits.length === 0) {
 		return sourceText;
@@ -128,6 +106,73 @@ export function stripNamedHTMLElementExportsFromServerModule(
 	}
 
 	return transformedSource;
+}
+
+interface ClassStubTarget {
+	bindingName?: string;
+	range: [number, number];
+	superName?: string;
+}
+
+function collectClassNodes(root: unknown): ClassStubTarget[] {
+	const classes: ClassStubTarget[] = [];
+	const seen = new Set<unknown>();
+
+	const visit = (value: unknown, parent: LooseNode | null) => {
+		if (value === null || typeof value !== "object" || seen.has(value)) {
+			return;
+		}
+
+		seen.add(value);
+
+		if (Array.isArray(value)) {
+			for (const entry of value) {
+				visit(entry, parent);
+			}
+
+			return;
+		}
+
+		const node = value as LooseNode;
+
+		if (typeof node.type !== "string") {
+			return;
+		}
+
+		if (node.type === "ClassDeclaration" || node.type === "ClassExpression") {
+			const range = getNodeRange(node);
+
+			if (range !== undefined) {
+				classes.push({
+					bindingName: classBindingName(node, parent),
+					range,
+					superName: getIdentifierName(node.superClass),
+				});
+			}
+		}
+
+		for (const child of Object.values(node)) {
+			visit(child, node);
+		}
+	};
+
+	visit(root, null);
+
+	return classes;
+}
+
+function classBindingName(node: LooseNode, parent: LooseNode | null): string | undefined {
+	const ownName = getIdentifierName(node.id);
+
+	if (ownName !== undefined) {
+		return ownName;
+	}
+
+	if (parent?.type === "VariableDeclarator") {
+		return getIdentifierName(parent.id);
+	}
+
+	return undefined;
 }
 
 function parseModuleWithOxc(filePath: string, sourceText: string) {
@@ -314,56 +359,6 @@ function getNamedExportLocalNames(moduleRecord: ModuleRecord): Set<string> {
 	}
 
 	return localNames;
-}
-
-function buildExportDeclarationReplacement(node: LooseNode, specifiers: unknown[]): string {
-	const prefixes: string[] = [];
-
-	if (node.exportKind === "type") {
-		prefixes.push("type");
-	}
-
-	const renderedSpecifiers = specifiers
-		.map((specifier) => renderExportSpecifier(asNode(specifier)))
-		.filter((specifierText) => specifierText !== undefined);
-	const prefixText = prefixes.length === 0 ? "export" : `export ${prefixes.join(" ")}`;
-
-	return `${prefixText} { ${renderedSpecifiers.join(", ")} };`;
-}
-
-function renderExportSpecifier(specifier: LooseNode | null): string | undefined {
-	if (specifier?.type !== "ExportSpecifier") {
-		return undefined;
-	}
-
-	const localName = getIdentifierName(specifier.local);
-	const exportedName = getIdentifierName(specifier.exported);
-
-	if (localName === undefined || exportedName === undefined) {
-		return undefined;
-	}
-
-	const typePrefix = specifier.exportKind === "type" ? "type " : "";
-
-	if (localName === exportedName) {
-		return `${typePrefix}${localName}`;
-	}
-
-	return `${typePrefix}${localName} as ${exportedName}`;
-}
-
-function getStatementClassDeclaration(node: LooseNode): LooseNode | null {
-	if (node.type === "ClassDeclaration") {
-		return node;
-	}
-
-	if (node.type !== "ExportNamedDeclaration") {
-		return null;
-	}
-
-	const declaration = asNode(node.declaration);
-
-	return declaration?.type === "ClassDeclaration" ? declaration : null;
 }
 
 function asNode(value: unknown): LooseNode | null {

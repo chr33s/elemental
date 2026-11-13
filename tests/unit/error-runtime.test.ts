@@ -213,6 +213,10 @@ export default function home() {
   return html\`<main>Home</main>\`;
 }
 `,
+			"layout.css": `body { color: black; }
+`,
+			[path.join("boom", "layout.css")]: `.boom { color: red; }
+`,
 			[path.join("boom", "index.server.ts")]: `export async function loader() {
   throw new Error("boom");
 }
@@ -237,13 +241,15 @@ export default function boom() {
 			},
 		);
 		const payload = (await response.json()) as RouterPayload;
+		const route = manifest.routes.find((entry) => entry.pattern === "/boom");
 
 		expect(response.status).toBe(500);
 		expect(response.headers.get("content-type")).toContain("application/json");
+		expect(route?.assets.css.length).toBeGreaterThan(0);
 		expect(payload).toEqual({
 			assets: {
 				scripts: [],
-				stylesheets: [],
+				stylesheets: (route?.assets.css ?? []).map((assetPath) => `/${assetPath}`),
 			},
 			head: "<title>Internal Server Error</title>",
 			outlet: "<main>server failure</main>",

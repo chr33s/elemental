@@ -6,16 +6,26 @@ type ElementalWindow = Window & {
 
 export async function rememberShellMarker(page: Page): Promise<void> {
 	await page.evaluate(() => {
-		(window as ElementalWindow).__elementalShellMarker = document.querySelector("#shell-marker");
+		(window as ElementalWindow).__elementalShellMarker =
+			document.querySelector("[data-route-outlet]");
 	});
 }
 
-export async function expectShellPreserved(page: Page): Promise<void> {
+export async function expectShellPreserved(
+	page: Page,
+	options: {
+		layout?: boolean;
+	} = {},
+): Promise<void> {
 	await expect(
 		page.evaluate(
 			() =>
-				document.querySelector("#shell-marker") ===
+				document.querySelector("[data-route-outlet]") ===
 				(window as ElementalWindow).__elementalShellMarker,
 		),
 	).resolves.toBe(true);
+
+	if (options.layout !== false) {
+		await expect(page.locator("#shell-marker")).toHaveText("Persistent shell");
+	}
 }

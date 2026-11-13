@@ -1,9 +1,7 @@
 export interface BuildManifestRoute {
 	assets: {
-		css?: string[];
-		js?: string[];
-		layoutCss?: string[];
-		scripts?: string[];
+		css: string[];
+		js: string[];
 	};
 	browser: {
 		errorBoundaries: string[];
@@ -46,12 +44,6 @@ export interface PublicBuildManifestRoute {
 	browser: Pick<BuildManifestRoute["browser"], "errorBoundaries">;
 	errorBoundaries: string[];
 	pattern: string;
-	/**
-	 * Identity of the route's outermost layout. Router payloads only re-render
-	 * inside the shared shell, so the client falls back to a full document
-	 * navigation when two routes disagree on this value.
-	 */
-	shell?: string;
 }
 
 export interface PublicBuildManifestIsland {
@@ -83,13 +75,15 @@ export function createPublicManifest(manifest: BuildManifest): PublicBuildManife
 		generatedAt: manifest.generatedAt,
 		islands,
 		routes: manifest.routes.map((route) => ({
-			assets: route.assets,
+			assets: {
+				css: [...route.assets.css],
+				js: [...route.assets.js],
+			},
 			browser: {
 				errorBoundaries: [...route.browser.errorBoundaries],
 			},
 			errorBoundaries: [...route.errorBoundaries],
 			pattern: route.pattern,
-			...(route.server.layouts[0] === undefined ? {} : { shell: route.server.layouts[0] }),
 		})),
 	};
 }

@@ -34,18 +34,7 @@ export default function home() {
 			`import { html, type LayoutProps } from "elemental";
 
 export default function rootLayout(props: LayoutProps) {
-  return html\`<!doctype html>
-    <html>
-      <head>
-        <meta charset="utf-8" />
-        ${"${props.head}"}
-      </head>
-      <body>
-        <div data-route-outlet>
-          <main class="frame">${"${props.outlet}"}</main>
-        </div>
-      </body>
-    </html>\`;
+  return html\`<main class="frame">${"${props.outlet}"}</main>\`;
 }
 `,
 		);
@@ -305,15 +294,13 @@ export default function docsRoute(props: RouteProps) {
 		expect(body).toContain("<title>Post alpha</title>");
 		expect(body).toContain('<meta name="description" content="Story alpha" />');
 
-		for (const stylesheetHref of (route.assets.layoutCss ?? []).map(
-			(assetPath) => `/${assetPath}`,
-		)) {
+		for (const stylesheetHref of route.assets.css.map((assetPath) => `/${assetPath}`)) {
 			expect(body).toContain(`href="${stylesheetHref}"`);
 		}
 
 		expect(body).toContain(`src="/${manifest.assets.clientEntry}"`);
 
-		for (const scriptHref of (route.assets.scripts ?? []).map((assetPath) => `/${assetPath}`)) {
+		for (const scriptHref of route.assets.js.map((assetPath) => `/${assetPath}`)) {
 			expect(body).toContain(`src="${scriptHref}"`);
 		}
 	});
@@ -339,16 +326,17 @@ export default function docsRoute(props: RouteProps) {
 		expect(payload.head).toContain("<title>Post alpha</title>");
 		expect(payload.head).toContain('<meta name="description" content="Story alpha" />');
 		expect(payload.head).not.toContain("<script");
+		expect(payload.outlet).toContain('<main class="frame">');
 		expect(payload.outlet).toContain('<section class="blog-shell">');
 		expect(payload.outlet).toContain("<h1>Post alpha</h1>");
 		expect(payload.outlet).not.toContain("<html");
 		expect(payload.outlet).not.toContain("data-route-outlet");
 		expect(payload.assets.stylesheets).toEqual(
-			(route.assets.layoutCss ?? []).map((assetPath) => `/${assetPath}`),
+			route.assets.css.map((assetPath) => `/${assetPath}`),
 		);
 		expect(payload.assets.scripts).toEqual([
 			`/${manifest.assets.clientEntry}`,
-			...(route.assets.scripts ?? []).map((assetPath) => `/${assetPath}`),
+			...route.assets.js.map((assetPath) => `/${assetPath}`),
 		]);
 	});
 

@@ -74,12 +74,6 @@ export async function classifyDevUpdate(options: {
 			return "reload";
 		}
 
-		// Router payloads exclude each route's outermost layout, so an edit to
-		// one can only reach the browser through a full reload.
-		if (fileName === "layout.ts" && isOutermostLayout(absolutePath, options.nextManifest)) {
-			return "reload";
-		}
-
 		if (absolutePath.endsWith(".css")) {
 			return "reload";
 		}
@@ -96,12 +90,6 @@ export async function classifyDevUpdate(options: {
 	}
 
 	return sawLayoutCss ? "css" : "route";
-}
-
-function isOutermostLayout(absolutePath: string, manifest: BuildManifest): boolean {
-	return manifest.routes.some(
-		(route) => route.layouts[0] !== undefined && path.resolve(route.layouts[0]) === absolutePath,
-	);
 }
 
 function summarizeManifest(manifest: BuildManifest) {

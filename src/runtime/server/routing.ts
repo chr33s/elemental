@@ -3,7 +3,7 @@ import { html, type HtmlRenderable } from "../shared/html.ts";
 import { htmlResponse, textResponse } from "../shared/responses.ts";
 import { createRouterPayloadResponse, isRouterRequest } from "../shared/router-protocol.ts";
 import type { LayoutProps, RouteParams, RouteProps, RouteServerContext } from "../shared/types.ts";
-import { createResolvedAssets, composeAssetHead } from "./assets.ts";
+import { createResolvedAssets } from "./assets.ts";
 import type { RouterPayload, ServerRuntimeAdapter } from "./core.ts";
 import { renderDocument, renderSubtree } from "./render-document.ts";
 
@@ -94,17 +94,16 @@ export async function renderMatchedRoute(options: {
 		typeof routeModule.head === "function" ? await routeModule.head(routeProps) : html``;
 	const routeBody = await routeModule.default(routeProps);
 	const assets = createResolvedAssets(manifest, route);
+	const outlet = await composeLayouts({
+		head: routeHead,
+		layoutModulePaths: route.server.layouts,
+		outlet: routeBody,
+		params,
+		runtime,
+		url,
+	});
 
 	if (isRouterRequest(request)) {
-		const outlet = await composeLayouts({
-			head: html``,
-			layoutModulePaths: route.server.layouts.slice(1),
-			outlet: routeBody,
-			params,
-			runtime,
-			url,
-		});
-
 		return createRouterPayloadResponse({
 			assets,
 			head: renderSubtree(routeHead),
@@ -113,27 +112,14 @@ export async function renderMatchedRoute(options: {
 		} satisfies RouterPayload);
 	}
 
-	if (route.server.layouts.length === 0) {
-		return htmlResponse(
-			renderDocument({
-				body: routeBody,
-				head: routeHead,
-				scripts: assets.scripts,
-				stylesheets: assets.stylesheets,
-			}),
-		);
-	}
-
-	const document = await composeLayouts({
-		head: composeAssetHead(routeHead, assets),
-		layoutModulePaths: route.server.layouts,
-		outlet: routeBody,
-		params,
-		runtime,
-		url,
-	});
-
-	return htmlResponse(document);
+	return htmlResponse(
+		renderDocument({
+			body: outlet,
+			head: routeHead,
+			scripts: assets.scripts,
+			stylesheets: assets.stylesheets,
+		}),
+	);
 }
 
 async function composeLayouts(options: {

@@ -4,14 +4,12 @@ import { ELEMENTAL_SERVER_READY_LOG } from "../shared/startup.ts";
 
 export async function startChildProcess(options: {
 	childPort: number;
+	publicOrigin: string;
 	serverFile: string;
 }): Promise<ChildProcess> {
 	const child = spawn(process.execPath, [options.serverFile], {
 		cwd: path.dirname(options.serverFile),
-		env: {
-			...process.env,
-			PORT: String(options.childPort),
-		},
+		env: createChildEnvironment(options),
 		stdio: ["inherit", "pipe", "pipe"],
 	});
 
@@ -58,6 +56,38 @@ export async function startChildProcess(options: {
 	});
 
 	return child;
+}
+
+function createChildEnvironment(options: {
+	childPort: number;
+	publicOrigin: string;
+}): NodeJS.ProcessEnv {
+	const env: NodeJS.ProcessEnv = {
+		...process.env,
+		// The proxy fetches the child on its own port, and fetch will not
+		// forward the browser's Host header. Pin generated URLs to the public
+		// dev origin so redirects stay on the proxy.
+		ELEMENTAL_CANONICAL_ORIGIN: options.publicOrigin,
+		PORT: String(options.childPort),
+	};
+	const allowedHosts = process.env.ELEMENTAL_ALLOWED_HOSTS?.trim();
+
+	if (allowedHosts !== undefined && allowedHosts.length > 0) {
+		const entries = allowedHosts
+			.split(",")
+			.map((entry) => entry.trim())
+			.filter((entry) => entry.length > 0);
+
+		for (const loopbackHost of ["localhost", "127.0.0.1", "::1"]) {
+			if (!entries.some((entry) => entry.toLowerCase() === loopbackHost)) {
+				entries.push(loopbackHost);
+			}
+		}
+
+		env.ELEMENTAL_ALLOWED_HOSTS = entries.join(",");
+	}
+
+	return env;
 }
 
 export async function stopChildProcess(childProcess: ChildProcess): Promise<void> {

@@ -22,7 +22,7 @@ afterEach(async () => {
 });
 
 describe("combined deployment targets", () => {
-	it("emits srvx and worker entrypoints when no target is supplied", async () => {
+	it("emits the node srvx entrypoint when no target is supplied", async () => {
 		const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase13-app-"));
 		const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase13-dist-"));
 
@@ -48,17 +48,9 @@ export default function index() {
 
 		expect(result.serverFile).toBe(path.join(outDir, "server.js"));
 		expect(result.srvxEntryFile).toBe(path.join(outDir, "srvx.js"));
-		expect(result.workerEntryFile).toBe(path.join(outDir, "worker.js"));
-		expect(result.wranglerConfigFile).toBe(path.join(outDir, "wrangler.jsonc"));
+		expect(result.workerEntryFile).toBeUndefined();
+		expect(result.wranglerConfigFile).toBeUndefined();
 		expect(await readFile(result.srvxEntryFile ?? "", "utf8")).toContain("createSrvxHandler");
-		expect(await readFile(result.workerEntryFile ?? "", "utf8")).toContain("createWorkerHandler");
-		expect(await readFile(result.wranglerConfigFile ?? "", "utf8")).toContain(
-			'"main": "./worker.js"',
-		);
-		expect(await readFile(result.wranglerConfigFile ?? "", "utf8")).toContain('"directory": "."');
-		expect(await readFile(result.wranglerConfigFile ?? "", "utf8")).toContain(
-			'"binding": "ASSETS"',
-		);
 	});
 
 	it("runs the generated srvx and worker handlers against the same built route", async () => {
@@ -93,6 +85,7 @@ export default function about() {
 			appDir,
 			outDir,
 			rootDir,
+			target: "both",
 		});
 		const srvxModule = (await import(pathToFileURL(result.srvxEntryFile ?? "").href)) as {
 			default: { fetch: (request: Request) => Promise<Response> };

@@ -220,6 +220,46 @@ export default function home(props: RouteProps) {
 		expect(consoleLog).toHaveBeenCalledOnce();
 	});
 
+	it("builds loopback request URLs and rejects non-local hosts by default", async () => {
+		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
+		const { manifest, outDir } = await buildTempApp({
+			"index.ts": `import { html, type RouteProps } from "elemental";
+
+export default function home(props: RouteProps) {
+  return html\`<main>${"${props.url.origin}"}</main>\`;
+}
+`,
+		});
+		const server = startServer({
+			distDir: outDir,
+			manifest,
+			port: 0,
+		});
+
+		await once(server, "listening");
+
+		const port = (server.address() as AddressInfo).port;
+		const accepted = await sendNodeRequest({
+			path: "/",
+			port,
+		});
+		const rejected = await sendNodeRequest({
+			headers: {
+				host: "evil.example",
+			},
+			path: "/",
+			port,
+		});
+
+		expect(accepted.status).toBe(200);
+		expect(accepted.body).toContain(`<main>http://127.0.0.1:${port}</main>`);
+		expect(rejected.status).toBe(400);
+		expect(rejected.body).toBe("Invalid Host header");
+
+		await closeServer(server);
+		expect(consoleLog).toHaveBeenCalledOnce();
+	});
+
 	it("rejects requests whose host header is not allowlisted", async () => {
 		const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 		const { manifest, outDir } = await buildTempApp({

@@ -27,49 +27,19 @@ export function renderManagedHead(head: string): void {
 	end.before(range.createContextualFragment(head));
 }
 
+export async function ensureManagedStylesheets(stylesheetHrefs: string[]): Promise<void> {
+	await insertMissingStylesheets(stylesheetHrefs);
+}
+
 export async function syncManagedStylesheets(stylesheetHrefs: string[]): Promise<() => void> {
 	const normalizedHrefs = [...new Set(stylesheetHrefs.map(normalizeAssetHref))];
 	const desiredHrefs = new Set(normalizedHrefs);
-	const existingLinks = new Map(
-		[...document.head.querySelectorAll<HTMLLinkElement>(managedStylesheetSelector())].map(
-			(link) => [normalizeAssetHref(link.href), link],
-		),
-	);
-	const orderedLinks = normalizedHrefs.map((stylesheetHref) => ({
-		href: stylesheetHref,
-		link: existingLinks.get(stylesheetHref),
-	}));
-	const pendingLoads: Promise<void>[] = [];
-	const anchor = document.head.querySelector(managedScriptSelector());
-
-	for (let index = 0; index < orderedLinks.length; index += 1) {
-		const entry = orderedLinks[index];
-
-		if (entry?.link === undefined) {
-			const link = document.createElement("link");
-			const referenceNode =
-				orderedLinks
-					.slice(index + 1)
-					.map((candidate) => candidate.link)
-					.find(
-						(candidate): candidate is HTMLLinkElement =>
-							candidate instanceof HTMLLinkElement && candidate.isConnected,
-					) ?? anchor;
-
-			link.rel = "stylesheet";
-			link.href = entry.href;
-			link.setAttribute(ELEMENTAL_MANAGED_ATTRIBUTE, ELEMENTAL_MANAGED_STYLESHEET);
-			document.head.insertBefore(link, referenceNode);
-			pendingLoads.push(waitForStylesheet(link));
-			entry.link = link;
-		}
-	}
-
-	await Promise.all(pendingLoads);
-
+	const existingLinks = collectManagedStylesheets();
 	const obsoleteLinks = [...existingLinks].flatMap(([href, link]) =>
 		desiredHrefs.has(href) ? [] : [link],
 	);
+
+	await insertMissingStylesheets(normalizedHrefs);
 
 	return () => {
 		for (const link of obsoleteLinks) {
@@ -115,27 +85,84 @@ function ensureManagedHeadMarkers(): {
 	};
 }
 
-async function waitForStylesheet(link: HTMLLinkElement): Promise<void> {
-	if (link.sheet !== null) {
-		return;
+async function insertMissingStylesheets(stylesheetHrefs: string[]): Promise<void> {
+	const normalizedHrefs = [...new Set(stylesheetHrefs.map(normalizeAssetHref))];
+	const existingLinks = collectManagedStylesheets();
+	const orderedLinks = normalizedHrefs.map((stylesheetHref) => ({
+		href: stylesheetHref,
+		link: existingLinks.get(stylesheetHref),
+	}));
+	const pendingLoads: Promise<void>[] = [];
+	const anchor = document.head.querySelector(managedScriptSelector());
+
+	for (let index = 0; index < orderedLinks.length; index += 1) {
+		const entry = orderedLinks[index];
+
+		if (entry === undefined || entry.link !== undefined) {
+			continue;
+		}
+
+		const link = document.createElement("link");
+		const referenceNode =
+			orderedLinks
+				.slice(index + 1)
+				.map((candidate) => candidate.link)
+				.find(
+					(candidate): candidate is HTMLLinkElement =>
+						candidate instanceof HTMLLinkElement && candidate.isConnected,
+				) ?? anchor;
+
+		pendingLoads.push(loadStylesheet(link, entry.href, referenceNode));
+		entry.link = link;
 	}
 
-	await new Promise<void>((resolve, reject) => {
-		const handleLoad = () => {
-			cleanup();
-			resolve();
-		};
-		const handleError = () => {
-			cleanup();
-			reject(new Error(`Failed to load stylesheet ${link.href}`));
-		};
-		const cleanup = () => {
+	await Promise.all(pendingLoads);
+}
+
+function collectManagedStylesheets(): Map<string, HTMLLinkElement> {
+	return new Map(
+		[...document.head.querySelectorAll<HTMLLinkElement>(managedStylesheetSelector())].map(
+			(link) => [normalizeAssetHref(link.href), link],
+		),
+	);
+}
+
+function loadStylesheet(
+	link: HTMLLinkElement,
+	href: string,
+	referenceNode: Node | null,
+): Promise<void> {
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		const finish = (settle: () => void) => {
+			if (settled) {
+				return;
+			}
+
+			settled = true;
 			link.removeEventListener("load", handleLoad);
 			link.removeEventListener("error", handleError);
+			settle();
+		};
+		const handleLoad = () => {
+			finish(resolve);
+		};
+		const handleError = () => {
+			finish(() => {
+				reject(new Error(`Failed to load stylesheet ${link.href}`));
+			});
 		};
 
-		link.addEventListener("load", handleLoad, { once: true });
-		link.addEventListener("error", handleError, { once: true });
+		link.addEventListener("load", handleLoad);
+		link.addEventListener("error", handleError);
+		link.rel = "stylesheet";
+		link.href = href;
+		link.setAttribute(ELEMENTAL_MANAGED_ATTRIBUTE, ELEMENTAL_MANAGED_STYLESHEET);
+		document.head.insertBefore(link, referenceNode);
+
+		if (link.sheet !== null) {
+			finish(resolve);
+		}
 	});
 }
 

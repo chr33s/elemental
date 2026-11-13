@@ -1,13 +1,14 @@
 import { execFile } from "node:child_process";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import type { DiscoveredRoute } from "../../src/build/discover.ts";
 import { discoverRoutes } from "../../src/build/discover.ts";
-import { buildProject } from "../../src/build/index.ts";
+import { buildFrameworkPackage, buildProject } from "../../src/build/index.ts";
 import type { BuildManifest } from "../../src/build/manifest.ts";
+import { handleElementalRequest } from "../../src/runtime/server/app.ts";
 import { toPosixPath } from "../../src/shared/path-utils.ts";
 import { writeRouteModule } from "./test-helpers/app-fixture.ts";
 
@@ -170,11 +171,9 @@ export default function docsPage() {
 				layouts: [`${relativeAppDir}/layout.ts`],
 				serverErrorBoundaries: [`${relativeAppDir}/error.server.ts`],
 			});
-			expect(route.assets.css).toEqual(route.assets.layoutCss);
-			expect(route.assets.js).toEqual(route.assets.scripts);
-			expect(route.assets.layoutCss ?? []).toHaveLength(1);
-			expect(route.assets.layoutCss?.[0]).toMatch(/^assets\/.+\.css$/u);
-			expect(route.assets.scripts ?? []).toHaveLength(3);
+			expect(route.assets.css).toHaveLength(1);
+			expect(route.assets.css[0]).toMatch(/^assets\/.+\.css$/u);
+			expect(route.assets.js).toHaveLength(3);
 			expect(route.browser.layouts).toHaveLength(1);
 			expect(route.browser.errorBoundaries).toHaveLength(1);
 			expect(route.browser.route).toMatch(/^assets\/.+\.js$/u);
@@ -518,16 +517,11 @@ export default function serverErrorBoundary() {
 		const route = manifest.routes.find((entry) => entry.pattern === "/");
 
 		expect(route).toBeDefined();
-		expect(route?.assets.css).toEqual(route?.assets.layoutCss);
-		expect(route?.assets.js).toEqual(route?.assets.scripts);
-		expect(route?.assets.layoutCss).toHaveLength(1);
-		expect(route?.assets.scripts).toHaveLength(3);
+		expect(route?.assets.css).toHaveLength(1);
+		expect(route?.assets.js).toHaveLength(3);
 		expect(route?.server.routeServer).toMatch(/^server\/.+\.js$/u);
 
-		const layoutCssText = await readFile(
-			path.join(outDir, route?.assets.layoutCss?.[0] ?? ""),
-			"utf8",
-		);
+		const layoutCssText = await readFile(path.join(outDir, route?.assets.css[0] ?? ""), "utf8");
 		expect(layoutCssText).toContain("background: papayawhip");
 
 		const browserRouteText = await readFile(path.join(outDir, route?.browser.route ?? ""), "utf8");
@@ -537,13 +531,14 @@ export default function serverErrorBoundary() {
 
 		const serverRouteText = await readFile(path.join(outDir, route?.server.route ?? ""), "utf8");
 		expect(serverRouteText).toContain(":host");
-		expect(serverRouteText).not.toContain("FancyCard");
+		expect(serverRouteText).not.toContain("HTMLElement");
+		expect(serverRouteText).not.toContain("connectedCallback");
 
 		const serverLayoutText = await readFile(
 			path.join(outDir, route?.server.layouts[0] ?? ""),
 			"utf8",
 		);
-		expect(serverLayoutText).not.toContain("AppShellElement");
+		expect(serverLayoutText).not.toContain("HTMLElement");
 
 		const routeServerText = await readFile(
 			path.join(outDir, route?.server.routeServer ?? ""),
@@ -624,6 +619,87 @@ export const secret = "hidden";
 		).rejects.toThrow(/must not import server-only module/u);
 	});
 
+	it("rejects browser-reachable imports of arbitrary server modules", async () => {
+		const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-db-server-"));
+		const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-db-server-dist-"));
+
+		temporaryPaths.add(appDir);
+		temporaryPaths.add(outDir);
+
+		await writeRouteModule(
+			appDir,
+			"index.ts",
+			`import { html } from "elemental";
+import { secret } from "./db.server.ts";
+
+export default function index() {
+  return html\`<main>${"${secret}"}</main>\`;
+}
+`,
+		);
+		await writeRouteModule(
+			appDir,
+			"db.server.ts",
+			`export const secret = "database-secret";
+`,
+		);
+
+		await expect(
+			buildProject({
+				appDir,
+				outDir,
+				rootDir,
+			}),
+		).rejects.toThrow(/must not import server-only module/u);
+	});
+
+	it("serves routes whose custom elements form a subclass chain", async () => {
+		const appDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-element-stubs-"));
+		const outDir = await mkdtemp(path.join(rootDir, ".tmp-phase4-element-stubs-dist-"));
+
+		temporaryPaths.add(appDir);
+		temporaryPaths.add(outDir);
+
+		await writeRouteModule(
+			appDir,
+			"index.ts",
+			`import { html } from "elemental";
+
+export class BaseCard extends HTMLElement {
+  static tagName = "base-card";
+  connectedCallback() {}
+}
+
+export class FancyCard extends BaseCard {
+  static tagName = "fancy-card";
+}
+
+export const AnonymousCard = class extends HTMLElement {
+  static tagName = "anon-card";
+};
+
+export default function route() {
+  return html\`<p>${"${BaseCard.name}"}:${"${FancyCard.name}"}:${"${AnonymousCard.name}"}</p>\`;
+}
+`,
+		);
+
+		const result = await buildProject({
+			appDir,
+			outDir,
+			rootDir,
+		});
+		const manifest = JSON.parse(await readFile(result.manifestPath, "utf8")) as BuildManifest;
+		const response = await handleElementalRequest(new Request("http://example.com/"), {
+			distDir: outDir,
+			manifest,
+		});
+		const body = await response.text();
+
+		expect(response.status).toBe(200);
+		expect(body).toContain("BaseCard:FancyCard:AnonymousCard");
+	});
+
 	it("verifies package import and CLI entrypoints through built artifacts", async () => {
 		const packageDir = await mkdtemp(path.join(rootDir, ".tmp-phase11-package-"));
 		const consumerAppDir = path.join(packageDir, "consumer-app");
@@ -658,6 +734,9 @@ export const secret = "hidden";
 		expect(packageJson.bin.elemental).toBe("./dist/cli.js");
 		expect(packageJson.exports["."].import).toBe("./dist/index.js");
 
+		await buildFrameworkPackage({
+			rootDir: packageDir,
+		});
 		await buildProject({
 			appDir: path.join("spec", "fixtures", "basic-app", "src"),
 			rootDir: packageDir,
@@ -708,6 +787,8 @@ export default function home() {
 		expect(consumerManifest.assets.clientEntry).toMatch(/^assets\/.+\.js$/u);
 		expect(consumerManifest.routes[0]?.server.route).toMatch(/^server\/.+\.js$/u);
 		expect(consumerManifest.routes[0]?.browser.route).toMatch(/^assets\/.+\.js$/u);
+		await expect(access(path.join(consumerAppDir, "dist", "index.js"))).rejects.toThrow(/ENOENT/u);
+		await expect(access(path.join(consumerAppDir, "dist", "cli.js"))).rejects.toThrow(/ENOENT/u);
 	});
 
 	it("emits an island manifest entry for each discovered island module", async () => {

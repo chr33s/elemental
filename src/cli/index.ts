@@ -5,10 +5,10 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { buildProject } from "../build/index.ts";
+import { buildFrameworkPackage, buildProject } from "../build/index.ts";
 import { startDevServer } from "../dev/index.ts";
 
-const supportedBuildTargets = new Set(["node", "worker"]);
+const supportedBuildTargets = new Set(["both", "node", "worker"]);
 
 async function main(): Promise<void> {
 	const options = parseArgs({
@@ -28,6 +28,14 @@ async function main(): Promise<void> {
 	const buildTarget = normalizeBuildTarget(options.values.target);
 
 	switch (command) {
+		case "build-package": {
+			await buildFrameworkPackage({
+				outDir: path.join(packageRoot, "dist"),
+				rootDir: packageRoot,
+			});
+			console.log("Built framework package into dist");
+			return;
+		}
 		case "build": {
 			const appDir = resolveAppDir(currentWorkingDirectory, packageRoot, appRoot);
 
@@ -91,7 +99,7 @@ async function startWatchMode(options: {
 	command: string;
 	commandArgs: string[];
 	packageRoot: string;
-	target?: "node" | "worker";
+	target?: "both" | "node" | "worker";
 }): Promise<void> {
 	const scriptPath = fileURLToPath(import.meta.url);
 	const frameworkSrcDir = path.join(options.packageRoot, "src");
@@ -111,16 +119,16 @@ async function startWatchMode(options: {
 	await runWatchProcess(nodeArgs);
 }
 
-function normalizeBuildTarget(value: unknown): "node" | "worker" | undefined {
+function normalizeBuildTarget(value: unknown): "both" | "node" | "worker" | undefined {
 	if (value === undefined) {
 		return undefined;
 	}
 
 	if (typeof value !== "string" || !supportedBuildTargets.has(value)) {
-		throw new Error('Elemental build target must be one of: "node", "worker".');
+		throw new Error('Elemental build target must be one of: "node", "worker", "both".');
 	}
 
-	return value as "node" | "worker";
+	return value as "both" | "node" | "worker";
 }
 
 async function collectWatchPaths(candidatePaths: string[]): Promise<string[]> {

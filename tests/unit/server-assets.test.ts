@@ -25,23 +25,6 @@ describe("server asset helpers", () => {
 		});
 	});
 
-	it("falls back to legacy manifest asset keys when current keys are absent", () => {
-		const assets = createResolvedAssets(
-			createManifest(),
-			createRoute({
-				assets: {
-					layoutCss: ["assets/layout.css"],
-					scripts: ["assets/legacy-route.js"],
-				},
-			}),
-		);
-
-		expect(assets).toEqual({
-			scripts: ["/assets/legacy-route.js"],
-			stylesheets: ["/assets/layout.css"],
-		});
-	});
-
 	it("composes managed head markup around route head and asset tags", () => {
 		const renderedHead = renderToString(
 			composeAssetHead(html`<title>${'Fish & "Chips"'}</title>`, {

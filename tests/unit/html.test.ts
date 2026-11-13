@@ -78,6 +78,19 @@ describe("html", () => {
 		expect(render("<second>")).toBe('<p title="&lt;second&gt;">&lt;second&gt;</p>');
 	});
 
+	it("escapes raw css so a style element cannot be closed early", () => {
+		const rendered = renderToString(
+			html`<style>
+				${cssText("a::before { content: '</style><script>'; }")}
+			</style>`,
+		);
+
+		expect(compactWhitespace(rendered)).toBe(
+			"<style>a::before { content: '\\3C /style>\\3C script>'; }</style>",
+		);
+		expect(rendered.match(/<\/style>/gu)).toHaveLength(1);
+	});
+
 	it("renders branded CSS text raw inside style tags", () => {
 		const result = html`<style>
 			${cssText(`:host { color: tomato; & > span { display: block; } }`)}

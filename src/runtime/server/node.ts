@@ -13,6 +13,7 @@ export interface StartServerOptions {
 	allowedHosts?: string[];
 	canonicalOrigin?: string;
 	distDir: string;
+	host?: string;
 	manifest: BuildManifest;
 	port?: number;
 }
@@ -25,20 +26,29 @@ interface NodeRequestSecurityOptions {
 
 export type { RouterPayload };
 
+const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "::1"];
+
 export function startServer(options: StartServerOptions): Server {
-	const allowedHosts = options.allowedHosts ?? readAllowedHostsFromEnvironment();
 	const canonicalOrigin = options.canonicalOrigin ?? process.env.ELEMENTAL_CANONICAL_ORIGIN;
 	const port = options.port ?? Number(process.env.PORT ?? 3000);
+	const host = options.host ?? process.env.HOST ?? "0.0.0.0";
+	const allowedHosts = resolveAllowedHosts(
+		options.allowedHosts ?? readAllowedHostsFromEnvironment(),
+		canonicalOrigin,
+	);
 	const handleRequest = createNodeRequestHandler(options);
 	const server = createServer((request, response) => {
+		const address = server.address();
+		const listenPort = typeof address === "object" && address !== null ? address.port : port;
+
 		void handleNodeRequest(request, response, handleRequest, {
 			allowedHosts,
 			canonicalOrigin,
-			fallbackHost: `127.0.0.1:${port}`,
+			fallbackHost: `127.0.0.1:${listenPort}`,
 		});
 	});
 
-	server.listen(port, () => {
+	server.listen(port, host, () => {
 		console.log(`${ELEMENTAL_SERVER_READY_LOG} http://127.0.0.1:${port}`);
 	});
 
@@ -166,10 +176,30 @@ function createNodeRequestUrl(request: IncomingMessage, options: NodeRequestSecu
 		throw new InvalidHostHeaderError();
 	}
 
+	// Request URLs never trust the inbound Host header. Public deployments set
+	// ELEMENTAL_CANONICAL_ORIGIN, which also carries the https scheme.
 	const baseOrigin =
-		options.canonicalOrigin ?? `http://${host ?? options.fallbackHost ?? "127.0.0.1:3000"}`;
+		options.canonicalOrigin ?? `http://${options.fallbackHost ?? "127.0.0.1:3000"}`;
 
 	return new URL(request.url ?? "/", normalizeOrigin(baseOrigin));
+}
+
+function resolveAllowedHosts(
+	configuredHosts: string[] | undefined,
+	canonicalOrigin: string | undefined,
+): string[] | undefined {
+	if (configuredHosts !== undefined) {
+		return configuredHosts;
+	}
+
+	// Without a canonical origin, only loopback hosts are accepted. Setting
+	// ELEMENTAL_CANONICAL_ORIGIN fixes generated URLs, so Host is no longer a
+	// way to poison them; an explicit allowlist can still restrict Host.
+	if (canonicalOrigin === undefined) {
+		return LOOPBACK_HOSTS;
+	}
+
+	return undefined;
 }
 
 function createAssetTextResponse(body: string, status: number): Response {

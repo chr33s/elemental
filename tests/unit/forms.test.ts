@@ -27,7 +27,7 @@ describe("createFormSubmission", () => {
 		expect(submission).toEqual({
 			history: "push",
 			method: "GET",
-			url: new URL("http://example.com/search?existing=1&query=alpha+beta&attachment=avatar.png"),
+			url: new URL("http://example.com/search?query=alpha+beta&attachment=avatar.png"),
 		});
 	});
 
@@ -83,7 +83,7 @@ describe("createFormSubmission", () => {
 		expect(submission).toEqual({
 			history: "push",
 			method: "GET",
-			url: new URL("http://example.com/lookup?scope=guides&query=router"),
+			url: new URL("http://example.com/lookup?query=router"),
 		});
 	});
 

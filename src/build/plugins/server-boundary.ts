@@ -16,7 +16,7 @@ export function createBrowserServerBoundaryPlugin(): Plugin {
 	return {
 		name: "elemental-browser-server-boundary",
 		setup(build) {
-			build.onResolve({ filter: /(^|\/)(index|error)\.server(\.[cm]?[jt]sx?)?$/ }, (args) => ({
+			build.onResolve({ filter: /(^|\/)[^/]+\.server(?:\.[a-z]+)?$/ }, (args) => ({
 				errors: [
 					{
 						text: `Browser-reachable module ${args.importer || "<entry>"} must not import server-only module ${args.path}.`,

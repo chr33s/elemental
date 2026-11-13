@@ -287,30 +287,19 @@ describe("client navigation helpers", () => {
 		});
 	});
 
-	it("reads script and stylesheet assets from current and legacy manifest keys", () => {
+	it("reads script and stylesheet assets from manifest keys", () => {
 		const browser = createFakeBrowser();
-		const modernRoute = createRoute("/modern", {
+		const route = createRoute("/modern", {
 			assets: {
 				css: ["assets/modern.css"],
 				js: ["assets/modern.js"],
 			},
 		});
-		const legacyRoute = createRoute("/legacy", {
-			assets: {
-				layoutCss: ["assets/legacy.css"],
-				scripts: ["assets/legacy.js"],
-			},
-		});
 
 		stubFakeBrowserGlobals(browser);
 
-		const modernStylesheets = getRouteStylesheetAssets(modernRoute);
-		const legacyStylesheets = getRouteStylesheetAssets(legacyRoute);
-
-		expect(getRouteScriptAssets(modernRoute)).toEqual(["assets/modern.js"]);
-		expect(getRouteScriptAssets(legacyRoute)).toEqual(["assets/legacy.js"]);
-		expect(modernStylesheets).toEqual(["http://example.com/assets/modern.css"]);
-		expect(legacyStylesheets).toEqual(["http://example.com/assets/legacy.css"]);
+		expect(getRouteScriptAssets(route)).toEqual(["assets/modern.js"]);
+		expect(getRouteStylesheetAssets(route)).toEqual(["http://example.com/assets/modern.css"]);
 	});
 });
 

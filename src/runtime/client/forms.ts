@@ -31,7 +31,9 @@ export function createFormSubmission(
 		submitter instanceof HTMLElement ? new FormData(form, submitter) : new FormData(form);
 
 	if (method === "GET") {
-		const query = new URLSearchParams(submitUrl.search);
+		// HTML replaces the action URL's query with the form entries. Keeping
+		// the previous query lets a stale first value win in searchParams.get.
+		const query = new URLSearchParams();
 
 		for (const [name, value] of formData.entries()) {
 			query.append(name, typeof value === "string" ? value : value.name);

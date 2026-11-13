@@ -8,7 +8,7 @@ import { html } from "../shared/html.ts";
 import { htmlResponse, textResponse } from "../shared/responses.ts";
 import { createRouterPayloadResponse, isRouterRequest } from "../shared/router-protocol.ts";
 import type { ErrorProps, RouteParams } from "../shared/types.ts";
-import { EMPTY_ASSETS } from "./assets.ts";
+import { createResolvedAssets, EMPTY_ASSETS } from "./assets.ts";
 import type { ServerRuntimeAdapter } from "./core.ts";
 import { renderDocument, renderSubtree } from "./render-document.ts";
 
@@ -59,7 +59,14 @@ export async function renderServerErrorResponse(options: {
 		if (isRouterRequest(options.request)) {
 			return createRouterPayloadResponse(
 				{
-					assets: EMPTY_ASSETS,
+					assets:
+						options.matchedRoute === undefined
+							? EMPTY_ASSETS
+							: {
+									scripts: [],
+									stylesheets: createResolvedAssets(options.manifest, options.matchedRoute.route)
+										.stylesheets,
+								},
 					head: renderSubtree(head),
 					outlet: renderSubtree(body),
 					status: options.status,

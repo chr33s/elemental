@@ -18,8 +18,6 @@ const baseManifest: BuildManifest = {
 			assets: {
 				css: ["assets/root.css"],
 				js: ["assets/root.js"],
-				layoutCss: ["assets/root.css"],
-				scripts: ["assets/root.js"],
 			},
 			browser: {
 				errorBoundaries: ["assets/error.js"],
@@ -78,6 +76,18 @@ describe("dev helpers", () => {
 				previousManifest: baseManifest,
 			}),
 		).resolves.toBe("css");
+	});
+
+	it("classifies layout render edits as route rerenders", async () => {
+		await expect(
+			classifyDevUpdate({
+				appDir: "/workspace/app",
+				changedFiles: ["/workspace/app/layout.ts"],
+				nextManifest: baseManifest,
+				previousManifest: baseManifest,
+				readTextFile: async () => "export default function layout(props) { return props.outlet; }",
+			}),
+		).resolves.toBe("route");
 	});
 
 	it("classifies safe route render edits as route rerenders", async () => {

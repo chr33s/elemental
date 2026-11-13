@@ -17,6 +17,7 @@
 	"scripts": {
 		"bench": "node --experimental-strip-types ./bench.ts",
 		"build": "node --experimental-strip-types ./src/cli/index.ts build",
+		"build:package": "node --experimental-strip-types ./src/cli/index.ts build-package",
 		"dev": "node --experimental-strip-types ./src/cli/index.ts dev",
 		"format": "oxfmt .",
 		"format:check": "oxfmt --check .",
@@ -30,7 +31,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "1.65.0",
-		"@types/node": "26.6.6",
+		"@types/node": "24.19.2",
 		"esbuild": "0.28.2",
 		"oxc-parser": "0.158.0",
 		"oxfmt": "0.78.0",

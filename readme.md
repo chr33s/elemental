@@ -23,9 +23,10 @@ Open `http://127.0.0.1:3000`. The default build uses the example app in `spec/fi
 
 | Command                            | Description                                                                      |
 | ---------------------------------- | -------------------------------------------------------------------------------- |
-| `npm run build`                    | Bundle the framework and example app into `dist/` (both Node and Worker targets) |
-| `npm run build -- --target node`   | Emit only Node deployment artifacts                                              |
+| `npm run build`                    | Build the example app for Node into `dist/`                                      |
 | `npm run build -- --target worker` | Emit only Worker deployment artifacts and generated Wrangler config              |
+| `npm run build -- --target both`   | Emit Node and Worker deployment artifacts                                        |
+| `npm run build:package`            | Emit `dist/index.js` and `dist/cli.js` for the framework package                 |
 | `npm run build -- --watch`         | Rebuild on source changes                                                        |
 | `npm run dev`                      | Watch mode with server restarts, live reload, CSS hot swaps, and route rerenders |
 | `npm run start`                    | Start the generated server from `dist/server.js`                                 |
@@ -408,15 +409,15 @@ export class MyButton extends HTMLElement {
 ### Node.js (srvx)
 
 ```bash
-npm run build -- --target node
+npm run build
 node dist/srvx.js
 ```
 
-Outputs `dist/server.js`, `dist/srvx.js`, `dist/assets/*`, `dist/manifest.json`.
+`npm run build` is the Node app build. Outputs `dist/server.js`, `dist/srvx.js`, `dist/assets/*`, `dist/manifest.json`. Publishable framework entrypoints come from `npm run build:package`, which writes `dist/index.js` and `dist/cli.js` only.
 
-Environment: `PORT` (default 3000), `HOST` (default 0.0.0.0), `ELEMENTAL_CANONICAL_ORIGIN` to decouple request URL construction from inbound `Host`, and `ELEMENTAL_ALLOWED_HOSTS` as a comma-separated allowlist for accepted hostnames or host:port values. Runs on any Node.js 24+ platform.
+Environment: `PORT` (default 3000), `HOST` (default `0.0.0.0`, the bind address), `ELEMENTAL_CANONICAL_ORIGIN` for the origin of generated URLs, and `ELEMENTAL_ALLOWED_HOSTS` as a comma-separated allowlist for accepted hostnames or host:port values. Runs on any Node.js 24+ platform.
 
-For production deployments behind a proxy or load balancer, prefer setting `ELEMENTAL_CANONICAL_ORIGIN` and optionally `ELEMENTAL_ALLOWED_HOSTS` instead of relying on raw inbound `Host` headers.
+Request URLs use `ELEMENTAL_CANONICAL_ORIGIN` when it is set. Otherwise they use `http://127.0.0.1:$PORT`, and a non-loopback `Host` is rejected until an allowlist or canonical origin is configured. Set the canonical origin on HTTPS deployments so redirects keep the `https` scheme. `HOST` only chooses the interface `server.listen` binds.
 
 At runtime, `/manifest.json` serves a client-safe subset for the browser runtime with `cache-control: no-store`. Production deployments that serve this endpoint through a CDN may override this with a short `max-age` or `stale-while-revalidate` to reduce origin load between builds. The full `dist/manifest.json` remains a trusted build artifact for deployment and server-side tooling.
 

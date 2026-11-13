@@ -49,8 +49,8 @@ export function createRoute(
 
 	return {
 		assets: options.assets ?? {
-			layoutCss: [],
-			scripts: [],
+			css: [],
+			js: [],
 		},
 		browser: {
 			errorBoundaries: options.browserBoundaryModules ?? options.browser?.errorBoundaries ?? [],

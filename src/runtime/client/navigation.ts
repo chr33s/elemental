@@ -1,12 +1,16 @@
 import type { PublicBuildManifest } from "../../build/manifest.ts";
-import { normalizeManifestRouteAssets } from "../shared/manifest-assets.ts";
 import { createRouterRequestHeaders, isRouterPayloadResponse } from "../shared/router-protocol.ts";
 import { matchManifestRoute, type MatchedManifestRoute } from "../shared/routes.ts";
 import type { RouterPayload } from "../shared/types.ts";
 import type { DeferredActivationController } from "./defer-activation.ts";
 import { recoverFromClientError } from "./errors.ts";
 import { createFormSubmission, type FormNavigationSubmission } from "./forms.ts";
-import { normalizeAssetHref, renderManagedHead, syncManagedStylesheets } from "./head.ts";
+import {
+	ensureManagedStylesheets,
+	normalizeAssetHref,
+	renderManagedHead,
+	syncManagedStylesheets,
+} from "./head.ts";
 import { activateIslands, type IslandModule } from "./islands.ts";
 import {
 	registerCustomElementDefinitions,
@@ -210,11 +214,11 @@ export async function loadScriptModules(
 }
 
 export function getRouteScriptAssets(route: PublicManifestRoute): string[] {
-	return normalizeManifestRouteAssets(route).js;
+	return route.assets.js;
 }
 
 export function getRouteStylesheetAssets(route: PublicManifestRoute): string[] {
-	return normalizeManifestRouteAssets(route).css.map((assetPath) => normalizeAssetHref(assetPath));
+	return route.assets.css.map((assetPath) => normalizeAssetHref(assetPath));
 }
 
 async function submitFormNavigation(
@@ -343,28 +347,36 @@ async function applyNavigationPayload(
 			return;
 		}
 
-		// Router payloads only re-render inside the current shell; a route with a
-		// different outermost layout needs a full document render.
-		if (!sharesRouteShell(state.currentRoute, finalRoute ?? matchedRoute)) {
-			fallbackToDocumentNavigation(finalUrl, history === "replace");
-			return;
-		}
+		const appliedPayload = payload;
+		let removeObsoleteStylesheets = () => {};
+		const stylesheetTask =
+			appliedPayload.status >= 400
+				? ensureManagedStylesheets(appliedPayload.assets.stylesheets)
+				: syncManagedStylesheets(appliedPayload.assets.stylesheets).then((removeObsolete) => {
+						removeObsoleteStylesheets = removeObsolete;
+					});
 
-		const [removeObsoleteStylesheets] = await Promise.all([
-			syncManagedStylesheets(payload.assets.stylesheets),
-			loadScriptModules(state, payload.assets.scripts),
-		]);
+		await Promise.all([stylesheetTask, loadScriptModules(state, appliedPayload.assets.scripts)]);
 
 		if (isStaleNavigation(state, generation)) {
 			return;
 		}
 
-		const appliedPayload = payload;
+		const committed = await performViewTransition(
+			() => {
+				if (isStaleNavigation(state, generation)) {
+					return;
+				}
 
-		await performViewTransition(async () => {
-			renderRouteOutlet(appliedPayload.outlet);
-			renderManagedHead(appliedPayload.head);
-		});
+				renderRouteOutlet(appliedPayload.outlet);
+				renderManagedHead(appliedPayload.head);
+			},
+			() => isStaleNavigation(state, generation),
+		);
+
+		if (!committed || isStaleNavigation(state, generation)) {
+			return;
+		}
 
 		removeObsoleteStylesheets();
 		applyHistory(finalUrl, history);
@@ -420,17 +432,6 @@ function isStaleNavigation(state: BootstrapState, generation: number | undefined
 	return generation !== undefined && state.navigationGeneration !== generation;
 }
 
-function sharesRouteShell(
-	currentRoute: MatchedManifestRoute<PublicManifestRoute> | undefined,
-	nextRoute: MatchedManifestRoute<PublicManifestRoute> | undefined,
-): boolean {
-	if (currentRoute === undefined || nextRoute === undefined) {
-		return true;
-	}
-
-	return (currentRoute.route.shell ?? null) === (nextRoute.route.shell ?? null);
-}
-
 function resetScrollPosition(url: URL): void {
 	if (url.hash.length > 1) {
 		const target = document.getElementById(decodeFragmentIdentifier(url.hash.slice(1)));
@@ -452,19 +453,43 @@ function decodeFragmentIdentifier(fragment: string): string {
 	}
 }
 
-async function performViewTransition(callback: () => Promise<void> | void): Promise<void> {
+async function performViewTransition(
+	callback: () => Promise<void> | void,
+	isStale: () => boolean,
+): Promise<boolean> {
 	const elementalDocument = document as Document & {
 		startViewTransition?: (callback: () => Promise<void> | void) => ViewTransitionLike;
 	};
+	const update = async () => {
+		if (isStale()) {
+			return;
+		}
+
+		await callback();
+	};
 
 	if (typeof elementalDocument.startViewTransition !== "function") {
-		await callback();
-		return;
+		await update();
+		return !isStale();
 	}
 
-	const transition = elementalDocument.startViewTransition(callback);
+	const transition = elementalDocument.startViewTransition(() => update());
 
-	await transition.finished.catch(() => {});
+	try {
+		await transition.finished;
+	} catch (error) {
+		if (isViewTransitionAbort(error)) {
+			return false;
+		}
+
+		throw error;
+	}
+
+	return !isStale();
+}
+
+function isViewTransitionAbort(error: unknown): boolean {
+	return error instanceof Error && error.name === "AbortError";
 }
 
 function renderRouteOutlet(outlet: string): void {

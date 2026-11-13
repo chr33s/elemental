@@ -41,7 +41,7 @@ export interface BuildOptions {
 	target?: BuildTarget;
 }
 
-export type BuildTarget = "node" | "worker";
+export type BuildTarget = "node" | "worker" | "both";
 
 export interface BuildResult {
 	clientFile: string;
@@ -55,15 +55,31 @@ export interface BuildResult {
 	workerEntryFile?: string;
 }
 
+export async function buildFrameworkPackage(
+	options: {
+		outDir?: string;
+		rootDir?: string;
+	} = {},
+): Promise<void> {
+	const rootDir = path.resolve(options.rootDir ?? process.cwd());
+	const outDir = path.resolve(rootDir, options.outDir ?? "dist");
+
+	await mkdir(outDir, { recursive: true });
+	await buildPackageEntrypoints(
+		path.join(rootDir, "src/index.ts"),
+		path.join(rootDir, "src/cli/index.ts"),
+		outDir,
+	);
+}
+
 export async function buildProject(options: BuildOptions = {}): Promise<BuildResult> {
-	const target = options.target;
+	const target = options.target ?? "node";
 	const rootDir = path.resolve(options.rootDir ?? process.cwd());
 	const appDir = path.resolve(rootDir, options.appDir ?? "src");
 	const outDir = path.resolve(rootDir, options.outDir ?? "dist");
 	const assetsDir = path.join(outDir, "assets");
 	const serverModulesDir = path.join(outDir, "server");
 	const packageEntryPath = path.join(rootDir, "src/index.ts");
-	const cliEntryPath = path.join(rootDir, "src/cli/index.ts");
 	const clientBootstrapPath = path.join(rootDir, "src/runtime/client/bootstrap.ts");
 	const devClientPath = path.join(rootDir, "src/runtime/client/dev-client.ts");
 	const serverAppPath = path.join(rootDir, "src/runtime/server/app.ts");
@@ -79,9 +95,6 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
 	}
 
 	const islands = await discoverIslands(appDir);
-
-	await buildPackageEntrypoints(packageEntryPath, cliEntryPath, outDir);
-
 	const layoutStylesheetAssets = await emitLayoutStylesheetAssets(
 		routes,
 		assetsDir,
@@ -210,8 +223,8 @@ export async function buildProject(options: BuildOptions = {}): Promise<BuildRes
 		write: true,
 	});
 
-	const shouldBuildNodeTarget = target !== "worker";
-	const shouldBuildWorkerTarget = target !== "node";
+	const shouldBuildNodeTarget = target === "node" || target === "both";
+	const shouldBuildWorkerTarget = target === "worker" || target === "both";
 	const srvxEntryFile = shouldBuildNodeTarget ? path.join(outDir, "srvx.js") : undefined;
 
 	if (srvxEntryFile !== undefined) {

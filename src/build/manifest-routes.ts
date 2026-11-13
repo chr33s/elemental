@@ -47,8 +47,6 @@ export function createManifestRoute(options: {
 		assets: {
 			css: layoutCssAssets,
 			js: [...browserLayouts, ...browserErrorBoundaries, browserRoute],
-			layoutCss: layoutCssAssets,
-			scripts: [...browserLayouts, ...browserErrorBoundaries, browserRoute],
 		},
 		browser: {
 			errorBoundaries: browserErrorBoundaries,

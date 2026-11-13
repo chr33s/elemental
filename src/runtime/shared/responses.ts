@@ -1,10 +1,10 @@
-import { renderToReadableStream, type HtmlRenderable } from "./html.ts";
+import { renderToString, type HtmlRenderable } from "./html.ts";
 import { ROUTER_HEADER_NAME } from "./router-protocol.ts";
 
 export function htmlResponse(body: HtmlRenderable, status = 200): Response {
 	// Plain strings go through the same escaped-by-default pipeline as every
 	// other renderable; raw markup must be wrapped in safeHtml()/html``.
-	return new Response(renderToReadableStream(body), {
+	return new Response(renderToString(body), {
 		headers: {
 			"content-type": "text/html; charset=utf-8",
 			"referrer-policy": "strict-origin-when-cross-origin",

@@ -237,29 +237,6 @@ export function renderToString(value: HtmlRenderable): string {
 }
 
 /**
- * Converts an HtmlRenderable value to a UTF-8 encoded ReadableStream.
- * This lets the server runtime stream document responses without changing
- * the existing escaping semantics.
- */
-export function renderToReadableStream(value: HtmlRenderable): ReadableStream<Uint8Array> {
-	const encoder = new TextEncoder();
-
-	return new ReadableStream<Uint8Array>({
-		start(controller) {
-			for (const chunk of renderRenderableChunks(value)) {
-				if (chunk.length === 0) {
-					continue;
-				}
-
-				controller.enqueue(encoder.encode(chunk));
-			}
-
-			controller.close();
-		},
-	});
-}
-
-/**
  * Escapes HTML special characters to prevent XSS attacks.
  *
  * Escapes: &, <, >, ", '
@@ -354,7 +331,11 @@ function* renderRenderableChunks(
 	}
 
 	if (isCssTextValue(value)) {
-		yield context.rawTextElement === "style" ? value.raw : escapeHtml(value.raw);
+		// `\3C ` is a CSS escape for `<`. The trailing space keeps the next
+		// character from being consumed, so `</style` cannot close the element.
+		yield context.rawTextElement === "style"
+			? value.raw.replaceAll("<", "\\3C ")
+			: escapeHtml(value.raw);
 		return;
 	}
 

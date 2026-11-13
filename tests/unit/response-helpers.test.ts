@@ -25,14 +25,6 @@ describe("response helpers", () => {
 		expect(await response.text()).toBe("&lt;script&gt;alert(1)&lt;/script&gt;");
 	});
 
-	it("streams HTML responses without collapsing the rendered chunks first", async () => {
-		const response = htmlResponse([safeHtml("<main>"), "Hello", safeHtml("</main>")]);
-		const chunks = await readResponseChunks(response);
-
-		expect(chunks.length).toBeGreaterThan(1);
-		expect(chunks.join("")).toBe("<main>Hello</main>");
-	});
-
 	it("creates plain text responses with the expected content type", async () => {
 		const response = textResponse("Not Found", 404);
 
@@ -87,32 +79,3 @@ describe("response helpers", () => {
 		expect(await response.json()).toEqual(payload);
 	});
 });
-
-async function readResponseChunks(response: Response): Promise<string[]> {
-	const reader = response.body?.getReader();
-
-	if (reader === undefined) {
-		return [];
-	}
-
-	const decoder = new TextDecoder();
-	const chunks: string[] = [];
-
-	while (true) {
-		const { done, value } = await reader.read();
-
-		if (done) {
-			break;
-		}
-
-		chunks.push(decoder.decode(value, { stream: true }));
-	}
-
-	const trailingText = decoder.decode();
-
-	if (trailingText.length > 0) {
-		chunks.push(trailingText);
-	}
-
-	return chunks;
-}

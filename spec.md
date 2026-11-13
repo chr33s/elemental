@@ -261,22 +261,17 @@ import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
 	return html`
-		<!doctype html>
-		<html>
-			<head>
-				<meta charset="utf-8" />
-				<meta name="viewport" content="width=device-width,initial-scale=1" />
-				${props.head}
-			</head>
-			<body>
-				${props.outlet}
-			</body>
-		</html>
+		<header>
+			<a href="/">Home</a>
+		</header>
+		<main>${props.outlet}</main>
 	`;
 }
 ```
 
-A nested layout may return a fragment or subtree wrapper rather than a full document shell.
+Every layout, including the root, returns a fragment. The framework document owns the doctype, `<html>`, `<head>`, managed assets, and the single `data-route-outlet`. `head` is still passed so a layout can read route metadata; the framework inserts it into `<head>`.
+
+A nested layout returns the same kind of fragment:
 
 Example:
 
@@ -299,10 +294,8 @@ For a matched route, Elemental composes output in this order:
 
 1. render the route body from `index.ts`,
 2. pass that result as `outlet` to the nearest parent layout,
-3. continue wrapping through each ancestor layout,
-4. stream the final rendered document response.
-
-The outermost layout is responsible for returning the full document shell when a full document response is needed.
+3. continue wrapping through each ancestor layout, including the root,
+4. emit the framework document around that fragment.
 
 ---
 
@@ -317,10 +310,10 @@ A route is rendered by:
 3. running `loader()` from `index.server.ts` if present,
 4. executing the default export from `index.ts`,
 5. composing nested layouts by executing matched `layout.ts` modules from leaf to root,
-6. injecting CSS and scripts,
-7. streaming the final document response.
+6. injecting CSS and scripts into the framework document,
+7. returning the final document response.
 
-This makes `index.ts` the primary source of route body markup, while `layout.ts` defines the surrounding layout structure and document shell.
+This makes `index.ts` the primary source of route body markup, while `layout.ts` defines the surrounding layout fragment. The framework document owns the shell.
 
 ---
 
@@ -616,7 +609,7 @@ Server-side imports of `index.ts` must not attempt to access `customElements`.
 
 Top-level code should avoid direct access to browser-only globals unless guarded.
 
-Elemental compiles separate server and browser bundles from `layout.ts`. Named exports that define custom element classes (subclasses of `HTMLElement`) are excluded from the server bundle. The default export is included in both bundles. This means authors write a single file, but the framework ensures that browser-only code such as custom element class bodies does not execute on the server.
+Elemental compiles separate server and browser bundles from `layout.ts`. Named exports that define custom element classes are replaced with empty class stubs in the server bundle so the module can evaluate. Server code must not call element methods. The browser bundle keeps the real class bodies. The default export is included in both bundles.
 
 ### Default export
 
@@ -630,18 +623,7 @@ Example:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-	return html`
-		<!doctype html>
-		<html>
-			<head>
-				<meta charset="utf-8" />
-				<meta name="viewport" content="width=device-width,initial-scale=1" />
-			</head>
-			<body>
-				<el-app-shell> ${props.outlet} </el-app-shell>
-			</body>
-		</html>
-	`;
+	return html`<el-app-shell>${props.outlet}</el-app-shell>`;
 }
 ```
 
@@ -662,18 +644,7 @@ Example:
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-	return html`
-		<!doctype html>
-		<html>
-			<head>
-				<meta charset="utf-8" />
-				<meta name="viewport" content="width=device-width,initial-scale=1" />
-			</head>
-			<body>
-				<el-app-shell> ${props.outlet} </el-app-shell>
-			</body>
-		</html>
-	`;
+	return html`<el-app-shell>${props.outlet}</el-app-shell>`;
 }
 
 export class AppShell extends HTMLElement {
@@ -1003,7 +974,7 @@ That shell:
 - renders the result of `error.server.ts` `head()` when present,
 - renders the error content inside `data-route-outlet`.
 
-For client-side navigations that receive an error response from the server, Elemental returns the rendered `error.server.ts` subtree through the normal router payload shape, along with the resolved head content and final HTTP status.
+For client-side navigations that receive an error response from the server, Elemental returns the rendered `error.server.ts` subtree through the normal router payload shape, along with the resolved head content and final HTTP status. A matched route's payload includes that route's stylesheet hrefs and no scripts. The client leaves stylesheets already in the document in place and adds any listed stylesheets that are missing.
 
 ### `error.ts` browser boundary convention
 
@@ -1169,42 +1140,20 @@ The client router is responsible for:
 
 To minimize wasted CPU and bandwidth during client navigations, the router sends an `X-Elemental-Router: true` header. When the server detects this header, it returns a structured partial payload instead of a full document. The payload includes:
 
-- the fully composed subtree that belongs inside `data-route-outlet`, including any nested layouts beneath the outermost document shell, or the resolved `error.server.ts` subtree when navigation ends in a server-rendered error,
+- the fully composed subtree that belongs inside `data-route-outlet`, including every layout from the root through the leaf, or the resolved `error.server.ts` subtree when navigation ends in a server-rendered error,
 - the route's resolved `<head>` content,
 - the final HTTP status,
 - the CSS and JS assets needed for the target route.
 
-This avoids generating and parsing a full document shell while preserving correct nested-layout behavior.
+This avoids generating and parsing a full document shell while preserving correct nested-layout behavior. Every route shares that framework shell, so the client swaps the outlet in place.
 
 Partial payload responses are marked with an `X-Elemental-Router: true` response header (plus `Vary: x-elemental-router` and `Cache-Control: no-store`, since the same URL also serves a full HTML document). The client identifies router payloads by that marker header, so ordinary JSON responses returned by loaders, actions, or `index.server.ts` handlers pass through to the caller untouched.
-
-Because the payload excludes each route's outermost layout, the client compares the current and destination routes' `shell` identity from the public manifest and falls back to a full document navigation when they differ.
 
 If a client-side navigation fails after the payload has been received, the router resolves the nearest applicable `error.ts` and renders it into `data-route-outlet`. If no boundary exists, the router falls back to a full document navigation.
 
 ### Route outlet
 
-The route outlet is the DOM subtree that is replaced during client-side navigations. Elemental identifies the outlet as the element marked with the `data-route-outlet` attribute.
-
-The outermost layout should mark the content insertion point:
-
-```ts
-export default function layout(props: LayoutProps) {
-	return html`
-		<!doctype html>
-		<html>
-			<head>
-				<meta charset="utf-8" />
-				<meta name="viewport" content="width=device-width,initial-scale=1" />
-				${props.head}
-			</head>
-			<body>
-				<div data-route-outlet>${props.outlet}</div>
-			</body>
-		</html>
-	`;
-}
-```
+The route outlet is the DOM subtree that is replaced during client-side navigations. Elemental identifies the outlet as the element marked with the `data-route-outlet` attribute. The framework document emits that marker once. Layouts return fragments and do not render the document or the outlet marker.
 
 During client navigation, the router fetches the next route payload, extracts the rendered subtree intended for `data-route-outlet`, and replaces the current outlet's contents with the new content.
 
@@ -1247,7 +1196,7 @@ dist/
   manifest.json
 ```
 
-`server.js`, `server/*`, `assets/*`, and `manifest.json` are the shared build artifacts. `srvx.js` is the Node adapter entry, while `worker.js` and `wrangler.jsonc` are emitted for the Worker target.
+`npm run build:package` emits `dist/index.js` and `dist/cli.js` for the framework package. An app build does not. `npm run build` defaults to the Node target and emits `server.js`, `server/*`, `srvx.js`, `assets/*`, and `manifest.json`. `--target worker` emits `worker.js` and `wrangler.jsonc` instead of `srvx.js`. `--target both` emits both deployment targets.
 
 ### Manifest
 
@@ -1274,10 +1223,8 @@ type ManifestRoute = {
 		serverErrorBoundaries: string[];
 	};
 	assets: {
-		css?: string[];
-		js?: string[];
-		layoutCss?: string[];
-		scripts?: string[];
+		css: string[];
+		js: string[];
 	};
 };
 
@@ -1306,10 +1253,10 @@ Where:
 - `server.route` is the server bundle path for `index.ts`,
 - `server.routeServer` is the server bundle path for `index.server.ts` when present,
 - `server.layouts` and `server.serverErrorBoundaries` are server bundle paths for matched layouts and server error boundaries,
-- `assets.css` and `assets.layoutCss` list emitted stylesheet asset paths,
-- `assets.js` and `assets.scripts` list emitted browser script asset paths.
+- `assets.css` lists emitted stylesheet asset paths,
+- `assets.js` lists emitted browser script asset paths.
 
-The public `manifest.json` served to the browser is a reduced projection of this manifest. In addition to `assets`, `pattern`, and error-boundary fields, each public route carries an optional `shell` value identifying its outermost layout so the client router can detect shell mismatches during client-side navigation.
+The public `manifest.json` served to the browser is a reduced projection of this manifest. It keeps `assets`, `pattern`, and error-boundary fields and omits server module paths.
 
 ---
 
@@ -1339,21 +1286,7 @@ The public `manifest.json` served to the browser is a reduced projection of this
 import { html } from "elemental";
 
 export default function layout(props: LayoutProps) {
-	return html`
-		<!doctype html>
-		<html>
-			<head>
-				<meta charset="utf-8" />
-				<meta name="viewport" content="width=device-width,initial-scale=1" />
-				${props.head}
-			</head>
-			<body>
-				<el-app-shell>
-					<div data-route-outlet>${props.outlet}</div>
-				</el-app-shell>
-			</body>
-		</html>
-	`;
+	return html`<el-app-shell>${props.outlet}</el-app-shell>`;
 }
 
 export class AppShell extends HTMLElement {
